@@ -2,6 +2,7 @@ import type { ActorRole, JukeAction } from "./types";
 
 const allActions = new Set<JukeAction["type"]>([
   "ADD_TRACK",
+  "REMOVE_TRACK",
   "ENQUEUE_TRACK",
   "REMOVE_FROM_QUEUE",
   "PLAY",

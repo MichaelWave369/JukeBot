@@ -18,6 +18,8 @@ export interface Track {
   artist?: string;
   source: string;
   sourceType: "local" | "url";
+  tags?: string[];
+  addedAt?: string;
 }
 
 export type TransportState = "stopped" | "playing" | "paused";
@@ -36,6 +38,7 @@ export interface RoomState {
 
 export type JukeAction =
   | { type: "ADD_TRACK"; track: Track }
+  | { type: "REMOVE_TRACK"; trackId: string }
   | { type: "ENQUEUE_TRACK"; trackId: string }
   | { type: "REMOVE_FROM_QUEUE"; index: number }
   | { type: "PLAY" }

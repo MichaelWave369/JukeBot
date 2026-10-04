@@ -6,16 +6,26 @@ import type {
   Receipt,
   RoomState,
   SubmissionResult,
+  Track,
 } from "./types";
 
 type Listener = (state: RoomState, receipt: Receipt) => void;
 type Clock = () => string;
 
+function cloneTrack(track: Track): Track {
+  return {
+    ...track,
+    tags: track.tags ? [...track.tags] : undefined,
+  };
+}
+
 function cloneState(state: RoomState): RoomState {
   return {
     ...state,
     queue: [...state.queue],
-    tracks: { ...state.tracks },
+    tracks: Object.fromEntries(
+      Object.entries(state.tracks).map(([id, track]) => [id, cloneTrack(track)]),
+    ),
   };
 }
 
@@ -27,8 +37,11 @@ export class JukeRuntime {
   constructor(
     roomId = "local-room",
     private readonly clock: Clock = () => new Date().toISOString(),
+    restoredState?: RoomState,
+    restoredReceipts: Receipt[] = [],
   ) {
-    this.state = initialRoomState(roomId);
+    this.state = restoredState ? cloneState(restoredState) : initialRoomState(roomId);
+    this.receipts.push(...restoredReceipts);
   }
 
   observe(): RoomState {
@@ -41,7 +54,9 @@ export class JukeRuntime {
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   submit(envelope: ActionEnvelope): SubmissionResult {

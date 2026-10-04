@@ -1,10 +1,13 @@
 # JukeBot Roadmap
 
-## Rung 1 — Local Deck
+## Rung 1 — Local Deck ✅
 Headless room runtime, authority, receipts, browser UI, local files, direct audio URLs, crate, queue and transport.
 
-## Rung 2 — Persistent Crates
-IndexedDB storage, playlists, tags, cover art, session restore, import/export and receipt replay.
+## Rung 2A — Durable React Deck
+React/Vite UI, GitHub Pages deployment, IndexedDB media storage, browser-restart crate recovery, room/session restoration and safe persistent deletion.
+
+## Rung 2B — Library Intelligence
+Named playlists, tags, cover art metadata, search/filtering, import/export bundles and receipt replay against matching durable media.
 
 ## Rung 3 — Party Room
 Host/guest protocol, QR request page, LAN room discovery and WebSocket transport. Guests request; host authority decides.
