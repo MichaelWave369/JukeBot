@@ -85,6 +85,7 @@ export function PartyRoom({
   const currentRoomRef = useRef(room);
   const currentSunoPlaylistsRef = useRef(sunoPlaylists);
   const guestRequestsRef = useRef(new Map<string, PartyGuestRequest>());
+  const guestNamesRef = useRef<Record<string, string>>({});
 
   const [hostState, setHostState] = useState<HostState | null>(null);
   const [hostPeers, setHostPeers] = useState<string[]>([]);
@@ -107,11 +108,6 @@ export function PartyRoom({
     currentRoomRef.current = room;
     currentSunoPlaylistsRef.current = sunoPlaylists;
   }, [room, sunoPlaylists]);
-
-  const hostCatalog = useMemo(
-    () => buildPartyCatalog(room, sunoPlaylists),
-    [room, sunoPlaylists],
-  );
 
   function syncHostEngineView() {
     setPending(hostEngineRef.current.pending());
@@ -150,22 +146,33 @@ export function PartyRoom({
         },
         onPeerLeave: (peerId) => {
           setHostPeers((current) => current.filter((id) => id !== peerId));
-          setGuestNames((current) => {
-            const next = { ...current };
-            delete next[peerId];
-            return next;
-          });
+          const nextNames = { ...guestNamesRef.current };
+          delete nextNames[peerId];
+          guestNamesRef.current = nextNames;
+          setGuestNames(nextNames);
         },
         onGuestHello: (hello, peerId) => {
           if (hello.protocol !== "jukebot.party.v1") return;
           const clean = hello.guestName.trim().slice(0, 40) || "Guest";
-          setGuestNames((current) => ({ ...current, [peerId]: clean }));
+          guestNamesRef.current = {
+            ...guestNamesRef.current,
+            [peerId]: clean,
+          };
+          setGuestNames(guestNamesRef.current);
         },
         onGuestRequest: (request, peerId) => {
           if (request.protocol !== "jukebot.party.v1") return;
 
+          const canonicalRequest: PartyGuestRequest = {
+            ...request,
+            guestName:
+              guestNamesRef.current[peerId] ??
+              request.guestName.trim().slice(0, 40) ??
+              "Guest",
+          };
+
           const result = hostEngineRef.current.ingest(
-            request,
+            canonicalRequest,
             peerId,
             buildPartyCatalog(
               currentRoomRef.current,
@@ -185,10 +192,10 @@ export function PartyRoom({
           const reason = result.reason;
           const refusal: PartyDecision = {
             protocol: "jukebot.party.v1",
-            requestId: request.requestId,
+            requestId: canonicalRequest.requestId,
             decision: "refused",
             reason,
-            receiptId: `protocol-${request.requestId}`,
+            receiptId: `protocol-${canonicalRequest.requestId}`,
             decidedAt: new Date().toISOString(),
           };
           if (network) void network.sendDecision(refusal, peerId);
@@ -204,6 +211,8 @@ export function PartyRoom({
       hostPeerId: network.selfPeerId,
     };
 
+    hostNetworkRef.current = network;
+
     const inviteUrl = buildPartyInviteUrl(
       invite,
       `${window.location.origin}${window.location.pathname}`,
@@ -215,7 +224,6 @@ export function PartyRoom({
       errorCorrectionLevel: "M",
     });
 
-    hostNetworkRef.current = network;
     setHostState({
       roomId: invite.roomId,
       hostPeerId: invite.hostPeerId,
@@ -234,6 +242,7 @@ export function PartyRoom({
     hostEngineRef.current = new PartyHostEngine();
     setHostState(null);
     setHostPeers([]);
+    guestNamesRef.current = {};
     setGuestNames({});
     setPending([]);
     setPartyLedger([]);
