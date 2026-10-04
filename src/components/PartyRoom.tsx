@@ -8,6 +8,12 @@ import {
   currentPartyInvite,
 } from "../party/invite";
 import { createPartyNetwork } from "../party/network";
+import {
+  classifyJoinIssue,
+  collectTransportDiagnostics,
+  transportProfileFromInputs,
+  transportProfileLabel,
+} from "../party/transport";
 import type { PartyNetwork } from "../party/network";
 import {
   buildPartyCatalog,
@@ -21,6 +27,7 @@ import type {
   PartyHostSnapshot,
   PartyRequestRecord,
   PartySelection,
+  PartyTransportProfile,
 } from "../party/types";
 
 interface PartyRoomProps {
@@ -103,6 +110,34 @@ export function PartyRoom({
   const [guestPendingIds, setGuestPendingIds] = useState<string[]>([]);
   const [guestError, setGuestError] = useState<string | null>(null);
   const [guestFilter, setGuestFilter] = useState("");
+  const [relayUrlsInput, setRelayUrlsInput] = useState("");
+  const [relayRedundancy, setRelayRedundancy] = useState(5);
+  const [turnUrl, setTurnUrl] = useState("");
+  const [turnUsername, setTurnUsername] = useState("");
+  const [turnCredential, setTurnCredential] = useState("");
+  const [hostTransportIssue, setHostTransportIssue] = useState<string | null>(null);
+
+  const hostTransportProfile = useMemo<PartyTransportProfile>(
+    () =>
+      transportProfileFromInputs({
+        relayUrls: relayUrlsInput,
+        relayRedundancy,
+        turnUrl,
+        turnUsername,
+        turnCredential,
+      }),
+    [relayUrlsInput, relayRedundancy, turnUrl, turnUsername, turnCredential],
+  );
+
+  const hostDiagnostics = useMemo(
+    () => collectTransportDiagnostics(hostTransportProfile),
+    [hostTransportProfile],
+  );
+
+  const guestDiagnostics = useMemo(
+    () => collectTransportDiagnostics(joinInfo?.transport),
+    [joinInfo],
+  );
 
   useEffect(() => {
     currentRoomRef.current = room;
@@ -121,7 +156,8 @@ export function PartyRoom({
   async function startHost() {
     if (hostNetworkRef.current) return;
 
-    const provisional = createPartyInvite("pending");
+    setHostTransportIssue(null);
+    const provisional = createPartyInvite("pending", hostTransportProfile);
     let network: PartyNetwork | null = null;
 
     network = createPartyNetwork(
@@ -201,9 +237,12 @@ export function PartyRoom({
           if (network) void network.sendDecision(refusal, peerId);
         },
         onJoinError: (message) => {
-          onNotice(`Party transport warning: ${message}`);
+          const issue = classifyJoinIssue(message);
+          setHostTransportIssue(`${issue.message} · ${issue.suggestion}`);
+          onNotice(`Party transport warning: ${issue.suggestion}`);
         },
       },
+      hostTransportProfile,
     );
 
     const invite = {
@@ -246,6 +285,7 @@ export function PartyRoom({
     setGuestNames({});
     setPending([]);
     setPartyLedger([]);
+    setHostTransportIssue(null);
     onNotice("Party Room host stopped");
   }
 
@@ -308,10 +348,11 @@ export function PartyRoom({
         ].slice(0, 20));
       },
       onJoinError: (message) => {
-        setGuestError(message);
+        const issue = classifyJoinIssue(message);
+        setGuestError(`${issue.message} · ${issue.suggestion}`);
         setGuestConnected(false);
       },
-    });
+    }, joinInfo.transport);
 
     guestNetworkRef.current = network;
 
@@ -479,6 +520,21 @@ export function PartyRoom({
           </div>
         </div>
 
+        <div className="transport-summary">
+          <strong>{transportProfileLabel(joinInfo.transport)}</strong>
+          <div className="transport-diagnostics">
+            {guestDiagnostics.map((diagnostic) => (
+              <span
+                className={`transport-chip ${diagnostic.status}`}
+                key={diagnostic.id}
+                title={diagnostic.detail}
+              >
+                {diagnostic.label}
+              </span>
+            ))}
+          </div>
+        </div>
+
         <div className="guest-join">
           <label>
             YOUR NAME
@@ -595,6 +651,109 @@ export function PartyRoom({
         </div>
         <span>{hostPeers.length} PEER{hostPeers.length === 1 ? "" : "S"}</span>
       </div>
+
+      {!hostState ? (
+        <details className="transport-config">
+          <summary>
+            <span>TRANSPORT PROFILE</span>
+            <strong>{transportProfileLabel(hostTransportProfile)}</strong>
+          </summary>
+
+          <div className="transport-diagnostics">
+            {hostDiagnostics.map((diagnostic) => (
+              <span
+                className={`transport-chip ${diagnostic.status}`}
+                key={diagnostic.id}
+                title={diagnostic.detail}
+              >
+                {diagnostic.label}
+              </span>
+            ))}
+          </div>
+
+          <div className="transport-form">
+            <label>
+              CUSTOM NOSTR RELAYS
+              <textarea
+                rows={3}
+                value={relayUrlsInput}
+                onChange={(event) => setRelayUrlsInput(event.target.value)}
+                placeholder={"Optional, one wss:// relay per line\nLeave blank for Trystero defaults"}
+              />
+            </label>
+
+            <label>
+              DEFAULT RELAY REDUNDANCY
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={relayRedundancy}
+                disabled={Boolean(relayUrlsInput.trim())}
+                onChange={(event) =>
+                  setRelayRedundancy(
+                    Math.max(1, Math.min(10, Number(event.target.value) || 1)),
+                  )
+                }
+              />
+            </label>
+
+            <label>
+              TURN URL
+              <input
+                value={turnUrl}
+                onChange={(event) => setTurnUrl(event.target.value)}
+                placeholder="turns:turn.example.com:5349"
+              />
+            </label>
+
+            <label>
+              TURN USERNAME
+              <input
+                value={turnUsername}
+                onChange={(event) => setTurnUsername(event.target.value)}
+                autoComplete="off"
+              />
+            </label>
+
+            <label>
+              TURN CREDENTIAL
+              <input
+                type="password"
+                value={turnCredential}
+                onChange={(event) => setTurnCredential(event.target.value)}
+                autoComplete="new-password"
+              />
+            </label>
+          </div>
+
+          <p className="source-note">
+            Custom transport settings are session-only. If TURN is configured,
+            its credential travels only inside the QR/link fragment so the guest
+            receives the same ephemeral profile. Use short-lived TURN credentials,
+            not a permanent account secret.
+          </p>
+        </details>
+      ) : (
+        <div className="transport-summary">
+          <strong>{transportProfileLabel(hostTransportProfile)}</strong>
+          <div className="transport-diagnostics">
+            {hostDiagnostics.map((diagnostic) => (
+              <span
+                className={`transport-chip ${diagnostic.status}`}
+                key={diagnostic.id}
+                title={diagnostic.detail}
+              >
+                {diagnostic.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {hostTransportIssue ? (
+        <p className="party-error">{hostTransportIssue}</p>
+      ) : null}
 
       {!hostState ? (
         <div className="party-start">
