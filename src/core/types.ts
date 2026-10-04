@@ -19,7 +19,23 @@ export interface Track {
   source: string;
   sourceType: "local" | "url";
   tags?: string[];
+  coverUrl?: string;
   addedAt?: string;
+}
+
+export interface TrackMetadataPatch {
+  title?: string;
+  artist?: string;
+  tags?: string[];
+  coverUrl?: string;
+}
+
+export interface Playlist {
+  id: string;
+  name: string;
+  trackIds: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type TransportState = "stopped" | "playing" | "paused";
@@ -39,6 +55,7 @@ export interface RoomState {
 export type JukeAction =
   | { type: "ADD_TRACK"; track: Track }
   | { type: "REMOVE_TRACK"; trackId: string }
+  | { type: "UPDATE_TRACK_METADATA"; trackId: string; patch: TrackMetadataPatch }
   | { type: "ENQUEUE_TRACK"; trackId: string }
   | { type: "REMOVE_FROM_QUEUE"; index: number }
   | { type: "PLAY" }
@@ -55,6 +72,8 @@ export interface ActionEnvelope {
   action: JukeAction;
 }
 
+export type StateHashVersion = "room-v2";
+
 export interface Receipt {
   receiptId: string;
   seq: number;
@@ -65,6 +84,7 @@ export interface Receipt {
   accepted: boolean;
   reason?: string;
   stateHash: string;
+  stateHashVersion?: StateHashVersion;
 }
 
 export interface SubmissionResult {

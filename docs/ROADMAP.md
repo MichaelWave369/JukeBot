@@ -3,14 +3,23 @@
 ## Rung 1 — Local Deck ✅
 Headless room runtime, authority, receipts, browser UI, local files, direct audio URLs, crate, queue and transport.
 
-## Rung 2A — Durable React Deck
+## Rung 2A — Durable React Deck ✅
 React/Vite UI, GitHub Pages deployment, IndexedDB media storage, browser-restart crate recovery, room/session restoration and safe persistent deletion.
 
 ## Rung 2B — Library Intelligence
-Named playlists, tags, cover art metadata, search/filtering, import/export bundles and receipt replay against matching durable media.
+Named playlists, tags, cover metadata, search/filtering, portable session bundles and deterministic receipt replay.
 
 ## Rung 3 — Party Room
 Host/guest protocol, QR request page, LAN room discovery and WebSocket transport. Guests request; host authority decides.
+
+Planned acceptance:
+- host owns transport authority
+- guest joins without receiving host secrets
+- guest request becomes a normal governed action
+- queue convergence is testable
+- disconnect/reconnect does not silently duplicate requests
+- a room receipt records accepted/refused remote actions
+- LAN and hosted transports share the same protocol envelope
 
 ## Rung 4 — Agent Seats
 Stable observation schema, action schema, JukeBot DJ policies, PhiBot bridge and governed external-model adapters.
@@ -25,4 +34,4 @@ Voice requests, room announcements, bot/DJ handoff and shared session presence t
 Installable PWA plus native shell packaging, local media indexing and OS-level media controls.
 
 ## Rung 8 — Replayable Sessions
-Portable session bundles with track references, action receipts, room policy, agent decisions and deterministic state reconstruction.
+Portable session bundles with media manifests, room policy, agent decisions, replay receipts and deterministic reconstruction across compatible runtimes.
