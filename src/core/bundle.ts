@@ -41,8 +41,8 @@ export function createBundle(
   state: RoomState,
   receipts: Receipt[],
   playlists: Playlist[],
-  sunoPlaylists: SunoPlaylist[] = [],
   exportedAt = new Date().toISOString(),
+  sunoPlaylists: SunoPlaylist[] = [],
 ): JukeBundle {
   const room = portableRoomState(state);
   return {
