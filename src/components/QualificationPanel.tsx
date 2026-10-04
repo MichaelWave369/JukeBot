@@ -25,10 +25,9 @@ interface QualificationPanelProps {
 }
 
 function loadSession(): PartyQualificationBundle {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (!stored) return createQualificationSession();
-
   try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return createQualificationSession();
     return parseQualificationBundle(stored);
   } catch {
     return createQualificationSession();
@@ -68,7 +67,11 @@ export function QualificationPanel({
   );
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(bundle));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(bundle));
+    } catch {
+      // Qualification still works in-memory when browser storage is unavailable.
+    }
   }, [bundle]);
 
   const passed = useMemo(
@@ -124,7 +127,11 @@ export function QualificationPanel({
 
   function clearStored() {
     const fresh = createQualificationSession();
-    localStorage.removeItem(STORAGE_KEY);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // In-memory reset is still authoritative for this browser session.
+    }
     setBundle(fresh);
     onNotice("Cleared local qualification evidence and started fresh");
   }
