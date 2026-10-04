@@ -455,3 +455,225 @@ footer {
   .row { align-items: flex-start; }
   .url-add, .playlist-save { grid-template-columns: 1fr; }
 }
+
+
+/* Suno Deck */
+.suno-deck {
+  margin: 0 0 1rem;
+  border-color: #b07cff33;
+  background:
+    linear-gradient(180deg, #17111dcc, #111116e8),
+    #111116;
+}
+
+.suno-head {
+  align-items: flex-start;
+}
+
+.suno-head .eyebrow {
+  margin-bottom: .35rem;
+}
+
+.suno-head h3 {
+  font-size: 1.05rem;
+}
+
+.suno-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, .8fr) minmax(360px, 1.2fr);
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.suno-builder {
+  display: grid;
+  align-content: start;
+  gap: .75rem;
+}
+
+.suno-builder label {
+  display: grid;
+  gap: .35rem;
+  color: #a99fad;
+  font-size: .72rem;
+  letter-spacing: .1em;
+}
+
+.suno-builder input,
+.suno-builder textarea {
+  width: 100%;
+  color: #f7f4e8;
+  letter-spacing: 0;
+}
+
+textarea {
+  resize: vertical;
+  border: 1px solid #ffffff20;
+  border-radius: .65rem;
+  background: #09090c;
+  color: #eee;
+  padding: .65rem .8rem;
+  font: inherit;
+}
+
+.source-note {
+  margin: 0;
+  color: #807687;
+  font-size: .74rem;
+  line-height: 1.5;
+}
+
+.suno-player {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: .75rem;
+}
+
+.suno-now {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.suno-now h4 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.suno-now small {
+  display: block;
+  margin-top: .25rem;
+  color: #817987;
+}
+
+.suno-frame {
+  display: block;
+  width: 100%;
+  min-height: 240px;
+  border: 1px solid #ffffff18;
+  border-radius: .85rem;
+  background: #08080b;
+}
+
+.suno-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.suno-empty {
+  min-height: 240px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: .4rem;
+  border: 1px dashed #ffffff20;
+  border-radius: .85rem;
+  color: #756d7a;
+  text-align: center;
+}
+
+.suno-empty strong {
+  color: #b7aebc;
+}
+
+.suno-library {
+  margin-top: 1rem;
+}
+
+.suno-playlist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: .55rem;
+  margin-top: .75rem;
+}
+
+.suno-playlist-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: .4rem;
+  padding: .4rem;
+  border: 1px solid #ffffff12;
+  border-radius: .75rem;
+  background: #0c0c10;
+}
+
+.suno-playlist-card.active {
+  border-color: #b07cff88;
+  box-shadow: inset 0 0 0 1px #b07cff22;
+}
+
+.suno-card-main {
+  display: grid;
+  justify-items: start;
+  gap: .2rem;
+  border-color: transparent;
+  text-align: left;
+}
+
+.suno-card-main strong {
+  color: #f5eff8;
+}
+
+.suno-card-main small {
+  color: #7f7585;
+}
+
+.suno-playlist-card > .danger {
+  align-self: center;
+  padding: .5rem .6rem;
+}
+
+.suno-track-list {
+  display: grid;
+  gap: .35rem;
+  margin-top: .8rem;
+  max-height: 270px;
+  overflow: auto;
+}
+
+.suno-track-button {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr auto;
+  align-items: center;
+  gap: .7rem;
+  width: 100%;
+  text-align: left;
+  border-color: #ffffff12;
+  color: #bdb3c1;
+  background: #0b0b0f;
+}
+
+.suno-track-button span,
+.suno-track-button code {
+  color: #756b7b;
+}
+
+.suno-track-button.active {
+  border-color: #7ee6db88;
+  background: #0c1818;
+  color: #f7f4e8;
+}
+
+@media (max-width: 900px) {
+  .suno-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .suno-now {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .suno-track-button {
+    grid-template-columns: 2rem 1fr;
+  }
+
+  .suno-track-button code {
+    display: none;
+  }
+}
