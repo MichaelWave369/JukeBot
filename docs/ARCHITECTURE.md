@@ -2,153 +2,181 @@
 
 JukeBot is built as a music runtime first and a visual jukebox second.
 
-## Control flow
+## Core control flow
 
 ```text
-Human / DJ / Guest / Agent / Replay / Script / Remote Peer
-                         |
-                         v
-                    ActionEnvelope
-                         |
-                         v
-                     Action Bus
-                         |
-                         v
-                  Authority Policy
-                    /         \
-               REFUSE        ACCEPT
-                 |              |
-                 |              v
-                 |        Deterministic Reducer
-                 |              |
-                 +-------> Receipt Ledger
-                                |
-                         portable room-v2 hash
-                                |
-          +---------------------+----------------------+
-          |                     |                      |
-          v                     v                      v
-       React UI          Native Audio Adapter      Persistence
-          |                                            |
-          v                                            v
-   Hosted Sources                                  IndexedDB v3
-     /      \
- Suno Deck  future adapters
+Human / DJ / Agent / Script
+          |
+          v
+     ActionEnvelope
+          |
+          v
+       Authority
+          |
+          v
+ deterministic native room
+          |
+          v
+   Reality Ledger
 ```
 
-No controller is allowed to mutate authoritative native playback state directly.
+Remote guests do not get a direct Action Bus handle.
 
-## Runtime boundary
+## Party Room flow
 
-`src/core/*` remains headless and browser-independent. React, IndexedDB, browser audio, hosted-source adapters and future network adapters sit outside the deterministic reducer.
+```text
+Guest phone
+   |
+   | PartyGuestRequest
+   v
+WebRTC data channel
+   |
+   v
+Host Party engine
+   |
+   +--> dedupe / catalog / source validation
+   |
+   v
+Host ACCEPT / REFUSE
+   |
+   +--> PartyReceipt
+   |
+   +--> native source -> guest-role Action Bus submission
+   |                       |
+   |                       v
+   |                 Reality Ledger receipt
+   |
+   +--> Suno source --> hosted-source selection only
+```
 
-The runtime can be constructed from a previously saved room snapshot and ledger. Hydration does not fabricate controller actions or retroactively rewrite receipts.
+Network reachability is not authority.
 
-## Native audio vs hosted sources
+## Party protocol
 
-JukeBot distinguishes two different realities:
+The wire protocol is versioned as:
+
+```text
+jukebot.party.v1
+```
+
+Key payloads:
+
+- host snapshot
+- guest hello
+- guest request
+- host decision
+
+A guest request carries:
+
+- unique request ID
+- guest display name
+- catalog hash
+- typed source selection
+- creation time
+
+Typed source selections prevent a native track ID and a hosted Suno song ID from collapsing into one ambiguous namespace.
+
+## Safe host snapshot
+
+The host snapshot intentionally contains only requestable metadata.
+
+Native entries expose:
+
+- JukeBot track ID
+- title
+- artist
+- local/url source **type**
+
+They do not expose:
+
+- local Blob URLs
+- direct remote audio URLs
+- local filenames beyond title metadata
+- IndexedDB records
+
+Suno entries expose provider identity metadata needed to request a hosted source selection.
+
+## Request dedupe
+
+The host fingerprints each request ID together with its peer ID, guest name, catalog hash and typed selection.
+
+If the same peer resends the same ID and content after reconnect, the request is treated as a duplicate and the existing record is reused.
+
+If a request ID is reused with different content, the protocol rejects it as a conflict.
+
+This makes reconnect retry behavior idempotent.
+
+## Catalog freshness
+
+Every safe catalog has a stable hash.
+
+A request must reference the hash of the catalog the guest actually saw. If the host library changes before the request arrives, the stale request is rejected rather than silently resolving against a different catalog.
+
+## Host decisions and receipts
+
+Accepted/refused decisions produce Party receipts.
+
+For accepted native media, the host submits:
+
+```text
+actor.role = guest
+action = ENQUEUE_TRACK
+```
+
+through the existing JukeRuntime.
+
+The Party receipt stores the resulting native receipt ID so the host decision can be followed into the Reality Ledger.
+
+For Suno, the Party receipt records acceptance but does not invent a native audio receipt. The accepted request selects the appropriate hosted Suno player.
+
+## P2P transport
+
+`src/party/network.ts` is a transport adapter. The protocol core does not import WebRTC or Trystero.
+
+The current adapter uses Trystero with its default Nostr matchmaking strategy. Once peers connect, JukeBot Party payloads use the browser WebRTC data channel.
+
+The transport is intentionally replaceable. A future LAN/self-hosted relay adapter must carry the same `jukebot.party.v1` messages.
+
+## Invite security boundary
+
+A host creates:
+
+- random room ID
+- random room password
+- expected host peer ID
+
+The public invite URL puts room ID and host peer ID in query parameters.
+
+The room password is placed in the URL fragment:
+
+```text
+...?party=<room>&host=<peer>#key=<secret>
+```
+
+Fragments are browser-side invite material and are not part of normal HTTP requests to GitHub Pages.
+
+Guests trust host snapshots/decisions only when they arrive from the peer ID pinned in the invite.
+
+## Native vs hosted audio
 
 ### Native audio
 
-Local files and direct playable audio URLs are controlled by `BrowserAudioAdapter`. JukeBot owns their queue/transport state and can issue governed receipts for those actions.
+JukeBot owns playback and can issue authoritative room receipts.
 
-### Hosted sources
+### Hosted Suno
 
-A hosted source such as Suno keeps playback inside the provider's player.
+Suno owns playback inside its iframe. JukeBot may select the hosted item and receipt the host's Party decision, but it does not claim playback-position/song-ended evidence that Suno has not exposed.
 
-JukeBot may:
+## Persistence
 
-- retain source provenance
-- select a hosted item
-- render the provider's hosted player
-- preserve a portable source manifest
-- provide navigation to the original provider page
+IndexedDB v3 owns durable local media, room state, native playlists and Suno source playlists.
 
-JukeBot must not claim provider-internal facts such as exact playback position, song-ended events or successful audio delivery unless the provider exposes a supported integration contract for those facts.
-
-## Suno Deck
-
-`src/sources/suno.ts` accepts canonical Suno song and embed URLs and extracts the stable song UUID.
-
-Supported source forms:
-
-```text
-https://suno.com/song/<uuid>
-https://suno.com/embed/<uuid>
-```
-
-Suno playlist URLs are stored separately as provenance:
-
-```text
-https://suno.com/playlist/<uuid>
-```
-
-The source adapter does not scrape playlist pages or derive direct CDN audio URLs.
-
-`src/components/SunoDeck.tsx` renders one active Suno-hosted player and lets the operator switch among a persisted Suno playlist manifest.
-
-## Durable persistence
-
-`src/persistence/indexedDb.ts` owns browser persistence.
-
-IndexedDB v3 stores:
-
-- media records and local audio Blobs
-- active room snapshot and up to 1,000 receipts
-- native named playlists
-- Suno source playlists
-
-Persistent native-crate deletion is privileged and also removes dangling native-playlist references.
-
-## Portable room-v2 hashing
-
-Browser `blob:` URLs are temporary implementation details. They change when a local audio Blob is restored from IndexedDB.
-
-`room-v2` hashes a portable projection of authoritative native room state:
-
-- local source URLs become `local://<track-id>`
-- track tags are canonicalized for hashing
-- meaningful metadata remains hash-relevant
-- remote native URLs remain hash-relevant
-
-Hosted-source player internals are not silently folded into this native room hash.
-
-## Replay validator
-
-`src/core/replay.ts` replays native-room receipts from the deterministic initial room state.
-
-Reports are:
-
-- `EXACT`
-- `MIXED_LEGACY`
-- `PARTIAL`
-- `MISMATCH`
-- `EMPTY`
-
-## Session bundles
-
-`src/core/bundle.ts` produces schema `jukebot.session.v1`.
-
-A bundle contains:
-
-- portable native room snapshot and hash
-- native-room receipt ledger
-- native playlists
-- Suno source-playlist manifests
-- native media manifest
-
-Local audio bytes and Suno-hosted audio bytes are deliberately excluded.
-
-## React surface
-
-`src/App.tsx` projects runtime observation and exposes operator controls. `SunoDeck` is a hosted-source surface, not a secret path into the native reducer.
-
-`window.JukeBot` exposes observation, ledger, replay validation and governed native action submission for scripts and agents.
+Party rooms in v0.5.0 are deliberately ephemeral. Room secrets and live peer IDs are not written into portable session bundles.
 
 ## GitHub Pages
 
-Vite builds with production base path `/JukeBot/`. The Pages workflow runs the full validation gate before uploading and deploying `dist/`.
+The static Pages deployment can still host a real Party Room because the browser transport is peer-to-peer. GitHub Pages serves the app bundle; it is not the Party request server.
 
 ## Next boundary
 
-Rung 3B adds a transport-neutral Party Room protocol so phones and remote peers can submit governed requests while preserving whether a selection is native media or a hosted source.
+Rung 3C adds optional controlled transport infrastructure such as a self-hosted relay and explicit TURN configuration without changing the Party protocol.

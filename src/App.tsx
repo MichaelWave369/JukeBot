@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
 import { BrowserAudioAdapter } from "./audio/browserAudio";
+import { PartyRoom } from "./components/PartyRoom";
 import { SunoDeck } from "./components/SunoDeck";
+import type { SunoRequestedSelection } from "./components/SunoDeck";
 import { assessBundle, createBundle, parseBundle } from "./core/bundle";
 import { validateReplay } from "./core/replay";
 import { JukeRuntime } from "./core/runtime";
@@ -50,6 +52,7 @@ export function App({ runtime, persistence }: AppProps) {
   const [playlistName, setPlaylistName] = useState("");
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [sunoPlaylists, setSunoPlaylists] = useState<SunoPlaylist[]>([]);
+  const [partySunoSelection, setPartySunoSelection] = useState<SunoRequestedSelection | null>(null);
   const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editArtist, setEditArtist] = useState("");
@@ -226,6 +229,55 @@ export function App({ runtime, persistence }: AppProps) {
     if (!tracks.length) return;
     const choice = tracks[Math.floor(Math.random() * tracks.length)];
     if (choice) submit({ type: "ENQUEUE_TRACK", trackId: choice.id }, agent);
+  }
+
+  function acceptPartyNative(
+    trackId: string,
+    guestName: string,
+    peerId: string,
+  ): { receiptId: string } | null {
+    if (!runtime.observe().tracks[trackId]) return null;
+
+    const result = submit(
+      { type: "ENQUEUE_TRACK", trackId },
+      {
+        id: `party.${peerId}`,
+        role: "guest",
+        label: guestName,
+      },
+    );
+
+    if (!result.receipt.accepted) return null;
+
+    return { receiptId: result.receipt.receiptId };
+  }
+
+  function acceptPartySuno(
+    playlistId: string | undefined,
+    songId: string,
+    guestName: string,
+    _peerId: string,
+  ): boolean {
+    const preferred = playlistId
+      ? sunoPlaylists.find((playlist) => playlist.id === playlistId)
+      : undefined;
+
+    const playlist =
+      preferred?.tracks.some((track) => track.songId === songId)
+        ? preferred
+        : sunoPlaylists.find((candidate) =>
+            candidate.tracks.some((track) => track.songId === songId),
+          );
+
+    if (!playlist) return false;
+
+    setPartySunoSelection({
+      playlistId: playlist.id,
+      songId,
+      token: crypto.randomUUID(),
+    });
+    setNotice(`Party request accepted: ${guestName} selected a Suno track`);
+    return true;
   }
 
   async function saveQueueAsPlaylist() {
@@ -413,9 +465,18 @@ export function App({ runtime, persistence }: AppProps) {
         </div>
       </section>
 
+      <PartyRoom
+        room={state}
+        sunoPlaylists={sunoPlaylists}
+        onAcceptNative={acceptPartyNative}
+        onAcceptSuno={acceptPartySuno}
+        onNotice={setNotice}
+      />
+
       <SunoDeck
         persistence={persistence}
         playlists={sunoPlaylists}
+        requestedSelection={partySunoSelection}
         onPlaylistsChange={setSunoPlaylists}
         onNotice={setNotice}
       />
