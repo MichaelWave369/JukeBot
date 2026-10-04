@@ -82,6 +82,9 @@ export function PartyRoom({
   const hostNetworkRef = useRef<PartyNetwork | null>(null);
   const guestNetworkRef = useRef<PartyNetwork | null>(null);
   const hostEngineRef = useRef(new PartyHostEngine());
+  const currentRoomRef = useRef(room);
+  const currentSunoPlaylistsRef = useRef(sunoPlaylists);
+  const guestRequestsRef = useRef(new Map<string, PartyGuestRequest>());
 
   const [hostState, setHostState] = useState<HostState | null>(null);
   const [hostPeers, setHostPeers] = useState<string[]>([]);
@@ -99,6 +102,11 @@ export function PartyRoom({
   const [guestPendingIds, setGuestPendingIds] = useState<string[]>([]);
   const [guestError, setGuestError] = useState<string | null>(null);
   const [guestFilter, setGuestFilter] = useState("");
+
+  useEffect(() => {
+    currentRoomRef.current = room;
+    currentSunoPlaylistsRef.current = sunoPlaylists;
+  }, [room, sunoPlaylists]);
 
   const hostCatalog = useMemo(
     () => buildPartyCatalog(room, sunoPlaylists),
@@ -131,7 +139,11 @@ export function PartyRoom({
 
           if (network) {
             void network.sendSnapshot(
-              buildPartySnapshot(room, sunoPlaylists, network.selfPeerId),
+              buildPartySnapshot(
+                currentRoomRef.current,
+                currentSunoPlaylistsRef.current,
+                network.selfPeerId,
+              ),
               peerId,
             );
           }
@@ -155,7 +167,10 @@ export function PartyRoom({
           const result = hostEngineRef.current.ingest(
             request,
             peerId,
-            buildPartyCatalog(room, sunoPlaylists),
+            buildPartyCatalog(
+              currentRoomRef.current,
+              currentSunoPlaylistsRef.current,
+            ),
           );
 
           if (result.status === "new" || result.status === "duplicate") {
@@ -250,6 +265,10 @@ export function PartyRoom({
           },
           joinInfo.hostPeerId,
         );
+
+        for (const pendingRequest of guestRequestsRef.current.values()) {
+          void network.sendGuestRequest(pendingRequest, joinInfo.hostPeerId);
+        }
       },
       onPeerLeave: (peerId) => {
         if (peerId === joinInfo.hostPeerId) {
@@ -270,6 +289,7 @@ export function PartyRoom({
       },
       onDecision: (decision, peerId) => {
         if (peerId !== joinInfo.hostPeerId) return;
+        guestRequestsRef.current.delete(decision.requestId);
         setGuestPendingIds((current) =>
           current.filter((id) => id !== decision.requestId),
         );
@@ -304,6 +324,7 @@ export function PartyRoom({
     guestNetworkRef.current = null;
     setGuestConnected(false);
     setGuestSnapshot(null);
+    guestRequestsRef.current.clear();
     setGuestPendingIds([]);
     setGuestDecisions([]);
     setGuestError(null);
@@ -328,6 +349,7 @@ export function PartyRoom({
       sentAt: new Date().toISOString(),
     };
 
+    guestRequestsRef.current.set(id, request);
     setGuestPendingIds((current) => [...current, id]);
 
     try {
@@ -336,6 +358,7 @@ export function PartyRoom({
         joinInfo.hostPeerId,
       );
     } catch (error) {
+      guestRequestsRef.current.delete(id);
       setGuestPendingIds((current) => current.filter((value) => value !== id));
       setGuestError(
         error instanceof Error ? error.message : "Could not send request",
