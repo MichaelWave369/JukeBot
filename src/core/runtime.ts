@@ -1,5 +1,5 @@
 import { canPerform } from "./authority";
-import { stableHash } from "./hash";
+import { roomStateHash, stableHash } from "./hash";
 import { initialRoomState, reduceRoom } from "./reducer";
 import type {
   ActionEnvelope,
@@ -66,12 +66,14 @@ export class JukeRuntime {
       this.state = reduceRoom(this.state, envelope.action);
     }
 
+    const stateHash = roomStateHash(this.state);
     const receipt: Receipt = {
       receiptId: stableHash({
         actionId: envelope.actionId,
         seq: this.state.seq,
         accepted: allowed,
-        state: this.state,
+        stateHash,
+        stateHashVersion: "room-v2",
       }),
       seq: this.state.seq,
       at: this.clock(),
@@ -80,7 +82,8 @@ export class JukeRuntime {
       action: envelope.action,
       accepted: allowed,
       reason: allowed ? undefined : `${envelope.actor.role} is not authorized for ${envelope.action.type}`,
-      stateHash: stableHash(this.state),
+      stateHash,
+      stateHashVersion: "room-v2",
     };
 
     this.receipts.push(receipt);
