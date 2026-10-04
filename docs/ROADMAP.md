@@ -6,10 +6,22 @@ Headless room runtime, authority, receipts, browser UI, local files, direct audi
 ## Rung 2A — Durable React Deck ✅
 React/Vite UI, GitHub Pages deployment, IndexedDB media storage, browser-restart crate recovery, room/session restoration and safe persistent deletion.
 
-## Rung 2B — Library Intelligence
+## Rung 2B — Library Intelligence ✅
 Named playlists, tags, cover metadata, search/filtering, portable session bundles and deterministic receipt replay.
 
-## Rung 3 — Party Room
+## Rung 3A — Suno Deck
+Hosted Suno song-player source adapter, persistent Suno playlist manifests, playlist provenance, canonical song-ID parsing and session-bundle portability.
+
+Acceptance:
+- canonical Suno song and embed links resolve to one stable song ID
+- duplicate Suno song IDs are rejected
+- invalid/non-Suno links are reported
+- Suno playlist share URL is retained as provenance
+- hosted player renders without exposing credentials
+- no private API, page scraping or guessed CDN audio URL is required
+- Suno playlist manifests survive IndexedDB restart and session export/import
+
+## Rung 3B — Party Room
 Host/guest protocol, QR request page, LAN room discovery and WebSocket transport. Guests request; host authority decides.
 
 Planned acceptance:
@@ -20,6 +32,7 @@ Planned acceptance:
 - disconnect/reconnect does not silently duplicate requests
 - a room receipt records accepted/refused remote actions
 - LAN and hosted transports share the same protocol envelope
+- source identity distinguishes native media from hosted-source selections
 
 ## Rung 4 — Agent Seats
 Stable observation schema, action schema, JukeBot DJ policies, PhiBot bridge and governed external-model adapters.
