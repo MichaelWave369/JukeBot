@@ -26,6 +26,15 @@ export function reduceRoom(state: RoomState, action: JukeAction): RoomState {
       next.tracks[action.track.id] = action.track;
       return next;
 
+    case "REMOVE_TRACK":
+      delete next.tracks[action.trackId];
+      next.queue = next.queue.filter((trackId) => trackId !== action.trackId);
+      if (next.currentTrackId === action.trackId) {
+        next.currentTrackId = null;
+        next.transport = "stopped";
+      }
+      return next;
+
     case "ENQUEUE_TRACK":
       if (!next.tracks[action.trackId]) return next;
       next.queue.push(action.trackId);
