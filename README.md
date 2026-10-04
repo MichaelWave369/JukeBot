@@ -2,7 +2,7 @@
 
 **A local-first, agent-native jukebox runtime for humans, bots, scripts and network peers.**
 
-Live site after the Pages workflow deploys from `main`:
+Live site:
 
 **https://michaelwave369.github.io/JukeBot/**
 
@@ -13,28 +13,35 @@ Controller -> Observation -> Action Bus -> Authority -> Room State
                                             |
                                             +-> Receipt Ledger
                                                      |
-                                          Audio / UI / Network adapters
+                                     Replay / Audio / UI / Persistence
 ```
 
-## Current build — v0.2.0 / Rung 2A
+## Current build — v0.3.0 / Rung 2B
 
-- React + Vite browser deck
-- GitHub Pages deployment workflow
-- Local audio file loading
-- Direct audio URL loading
-- IndexedDB-backed persistent crate
-- Local audio Blobs survive page reloads
-- Queue/current track/volume/ledger session restore
-- Safe track removal from persistent storage and runtime state
-- Browser restart restores the crate but does not autoplay
-- Operator, DJ, guest, agent, replay and script roles
-- Explicit authority policy
-- Deterministic room reducer
-- Receipt for every accepted or refused action
-- Browser audio adapter isolated from the core
-- `window.JukeBot` control API
-- Vitest acceptance coverage
-- GitHub Actions validation
+### Deck
+- React + Vite live GitHub Pages app
+- local audio files and direct playable audio URLs
+- persistent IndexedDB crate
+- queue, transport, volume and safe restart behavior
+- cover-art URL support
+
+### Library intelligence
+- search by title, artist or tag
+- governed metadata editing
+- persistent tags
+- named playlists
+- save current queue as a playlist
+- load and delete playlists
+- safe cleanup of playlist references when tracks are removed
+
+### Portable evidence
+- `room-v2` state hashes normalize temporary local `blob:` URLs
+- deterministic receipt replay validator
+- replay states: `EXACT`, `MIXED_LEGACY`, `PARTIAL`, `MISMATCH`, `EMPTY`
+- legacy receipts remain explicitly legacy
+- portable JSON session export/import
+- import refuses a deterministic replay mismatch
+- missing local audio is reported rather than fabricated
 
 ## Run locally
 
@@ -58,7 +65,10 @@ npm run check
 Open the browser console:
 
 ```js
+JukeBot.version
 JukeBot.observe()
+JukeBot.ledger()
+JukeBot.replay()
 
 JukeBot.submit({
   type: "PLAY"
@@ -67,20 +77,34 @@ JukeBot.submit({
   role: "agent",
   label: "My Agent"
 })
-
-JukeBot.ledger()
-JukeBot.persistence
 ```
 
-Controllers do not receive a privileged back door. They submit normal actions and authority decides whether those actions are allowed.
+Controllers do not receive a privileged playback back door. They submit normal actions and authority decides whether those actions are allowed.
 
 ## Persistence model
 
-Local media bytes are stored in the browser's IndexedDB database. Runtime-only `blob:` URLs are regenerated when JukeBot starts again. Room state and the latest 1,000 receipts are persisted alongside the crate.
+Local media bytes are stored in the browser's IndexedDB database. Runtime-only `blob:` URLs are regenerated when JukeBot starts again. Room state, playlists and up to the latest 1,000 receipts are persisted.
 
 Remote tracks store their direct URL rather than copying media bytes.
 
-JukeBot intentionally resumes restored sessions in the stopped state so browser autoplay policy and operator intent remain authoritative.
+JukeBot intentionally restores playback in the stopped state so browser autoplay policy and operator intent remain authoritative.
+
+## Session bundles
+
+Session bundles are JSON evidence and library manifests, not secret ZIP archives full of somebody's music collection.
+
+They contain:
+
+- portable room snapshot
+- room hash
+- receipt ledger
+- playlists
+- track metadata
+- remote track URLs when applicable
+
+They do **not** contain local audio bytes.
+
+A bundle imported on another device can restore remote tracks immediately. Local tracks are matched by media identity when already present; missing local files are reported so the operator can add them deliberately.
 
 ## Audio policy
 
