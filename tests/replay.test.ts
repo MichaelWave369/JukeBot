@@ -110,7 +110,7 @@ describe("receipt replay", () => {
   it("labels old receipts honestly instead of upgrading them by assumption", () => {
     const legacy: Receipt = {
       receiptId: "legacy",
-      seq: 0,
+      seq: 1,
       at: "old",
       actionId: "old-action",
       actor: agent,
