@@ -18,26 +18,36 @@ QR joining, safe guest catalog, typed native/Suno requests, host authority, requ
 ## Rung 3C1 — Transport Diagnostics + Portable Network Profile ✅
 Browser readiness diagnostics, configurable Nostr relays/redundancy, optional TURN and private-fragment transport profiles.
 
-## Rung 3C2 — Controlled Relay Adapter
-Optional self-hosted Trystero WebSocket signaling with explicit strategy selection.
-
-Acceptance:
-- transport profile distinguishes `nostr` and `ws-relay`
-- default remains Nostr
-- controlled mode uses `@trystero-p2p/ws-relay`
-- controlled mode requires explicit ws/wss relay URL(s)
-- controlled mode never silently falls back to Nostr
-- QR invite carries strategy and relay URLs in the private fragment
-- guest automatically joins using the host-selected strategy
-- TURN remains compatible with either strategy
-- repository includes runnable relay service
-- relay exposes health and status endpoints
-- relay has bounded topic/subscription defaults
-- relay shuts down cleanly
-- CI boots and probes the relay before build passes
+## Rung 3C2 — Controlled Relay Adapter ✅
+Optional operator-controlled Trystero WebSocket signaling, fail-closed strategy selection, relay runtime, health/status endpoints and relay smoke qualification.
 
 ## Rung 3C3 — Physical Network Qualification
-Two-device LAN/WAN test matrix, restrictive NAT/TURN qualification, mobile browser matrix, disconnect/reconnect soak and connection-evidence receipts.
+Evidence-backed real-device qualification.
+
+Software acceptance:
+- qualification schema is deterministic
+- required physical scenarios are frozen
+- PASS can require machine-observed evidence
+- contradictory PASS evidence forces overall FAIL
+- blocked/unrun scenarios remain PARTIAL
+- qualification export contains no room secret, TURN credential, relay URL, peer ID, IP or media URL
+- imported overall status is recomputed instead of trusted
+- safe observation counters are captured in the host UI
+- CI tests the qualification engine but never claims physical readiness
+
+Physical acceptance:
+- same-LAN PC ↔ physical guest via Nostr
+- cellular/WAN guest via Nostr
+- controlled WebSocket relay path
+- TURN fallback on a restrictive path
+- disconnect/reconnect retry remains idempotent
+- two or more simultaneous guests
+- accepted native request links Party receipt to Reality Ledger
+- accepted Suno request stays on hosted-source evidence lane
+- host stop/new-room/rejoin succeeds
+- all nine scenarios PASS in one exported field qualification session
+
+Only then may the Party network state be labeled `FIELD_QUALIFIED`.
 
 ## Rung 4 — Agent Seats
 Stable observation schema, action schema, JukeBot DJ policies, PhiBot bridge and governed external-model adapters.
