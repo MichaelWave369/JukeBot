@@ -23,7 +23,10 @@ export function reduceRoom(state: RoomState, action: JukeAction): RoomState {
 
   switch (action.type) {
     case "ADD_TRACK":
-      next.tracks[action.track.id] = action.track;
+      next.tracks[action.track.id] = {
+        ...action.track,
+        tags: action.track.tags ? [...action.track.tags] : undefined,
+      };
       return next;
 
     case "REMOVE_TRACK":
@@ -34,6 +37,17 @@ export function reduceRoom(state: RoomState, action: JukeAction): RoomState {
         next.transport = "stopped";
       }
       return next;
+
+    case "UPDATE_TRACK_METADATA": {
+      const track = next.tracks[action.trackId];
+      if (!track) return next;
+      next.tracks[action.trackId] = {
+        ...track,
+        ...action.patch,
+        tags: action.patch.tags ? [...action.patch.tags] : track.tags,
+      };
+      return next;
+    }
 
     case "ENQUEUE_TRACK":
       if (!next.tracks[action.trackId]) return next;
