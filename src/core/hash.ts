@@ -1,3 +1,5 @@
+import type { RoomState, Track } from "./types";
+
 function canonicalize(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
 
@@ -6,6 +8,7 @@ function canonicalize(value: unknown): string {
   }
 
   const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, child]) => child !== undefined)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, child]) => `${JSON.stringify(key)}:${canonicalize(child)}`);
 
@@ -22,4 +25,28 @@ export function stableHash(value: unknown): string {
   }
 
   return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function portableTrack(track: Track): Track {
+  return {
+    ...track,
+    tags: track.tags ? [...track.tags].sort() : undefined,
+    source: track.sourceType === "local" ? `local://${track.id}` : track.source,
+  };
+}
+
+export function portableRoomState(state: RoomState): RoomState {
+  return {
+    ...state,
+    queue: [...state.queue],
+    tracks: Object.fromEntries(
+      Object.entries(state.tracks)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([id, track]) => [id, portableTrack(track)]),
+    ),
+  };
+}
+
+export function roomStateHash(state: RoomState): string {
+  return stableHash(portableRoomState(state));
 }
