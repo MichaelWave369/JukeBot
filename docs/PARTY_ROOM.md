@@ -2,111 +2,121 @@
 
 Party Room turns the live GitHub Pages JukeBot into a cross-device request room without giving guests playback authority.
 
-## Host
+## Normal host flow
 
-1. Open JukeBot on the device that owns the library and playback.
-2. Press **START PARTY ROOM**.
-3. Show the QR code or copy the invite link.
-4. Leave the host page open.
+1. Open JukeBot on the playback/library device.
+2. Expand **TRANSPORT PROFILE** if you need custom networking.
+3. Press **START PARTY ROOM**.
+4. Show the QR code or copy the invite link.
 5. Guests scan the invite and request tracks.
-6. Review each pending request.
-7. Press **ACCEPT** or **REFUSE**.
+6. Accept or refuse each request.
 
-Accepted native requests enter the ordinary Action Bus as a `guest` actor.
+The default transport profile requires no configuration.
 
-Accepted Suno requests select the requested hosted Suno song in the Suno Deck.
+## Default networking
 
-## Guest
+JukeBot uses Trystero's default Nostr matchmaking strategy to discover peers and WebRTC data channels for Party messages.
 
-1. Scan the host QR code.
-2. Enter a display name.
-3. Press **JOIN PARTY**.
-4. Browse/search the safe host catalog.
-5. Press **REQUEST** on a native or Suno item.
-6. Wait for the host decision.
+The transport diagnostics show:
 
-Guests never receive play, pause, skip, volume or crate-edit authority.
+- secure browser context
+- WebRTC availability
+- Web Crypto availability
+- WebSocket availability
+- browser online state
+- signaling profile
+- TURN fallback status
 
-## What the guest catalog contains
+A yellow TURN badge is not a failure. It means direct WebRTC is being attempted without a configured relay fallback.
 
-Native entries:
+## Custom Nostr relays
 
-- JukeBot track ID
-- title
-- artist
-- source type (`local` or `url`)
+The host may supply one or more secure WebSocket relay URLs:
 
-Suno entries:
+```text
+wss://relay-one.example
+wss://relay-two.example
+```
 
-- Suno song UUID
-- title
-- JukeBot Suno playlist ID/name
+When custom relay URLs are present, JukeBot passes the entire list to Trystero instead of default relay redundancy.
 
-The safe catalog does not expose native audio URLs.
+Without custom URLs, the host can tune default relay redundancy from 1 through 10.
 
-That includes both:
+Invalid/non-WebSocket URLs are discarded by profile normalization.
 
-- temporary local `blob:` URLs
-- direct playable remote URLs held by the host
+## TURN fallback
 
-## Reconnect behavior
+For restrictive NAT/firewall networks, the host can add TURN:
 
-Each guest request has a unique request ID.
+```text
+turns:turn.example.com:5349
+```
 
-If a guest temporarily loses the host connection while a request is unresolved, JukeBot keeps the original request envelope and resends the same ID when the host peer reconnects.
+with optional username and credential.
 
-The host treats an identical resend as a duplicate and reuses the original request record.
+The normalized TURN profile is passed to Trystero, which keeps its normal STUN behavior while adding the supplied TURN servers.
 
-A reused request ID with different content is rejected.
+### Credential rule
 
-## Catalog freshness
+TURN credentials entered in the UI are:
 
-Requests include the hash of the catalog snapshot used by the guest.
+- session-only
+- not written to IndexedDB
+- not written to JukeBot session bundles
+- not committed to GitHub
+- not placed in normal URL query parameters
 
-If the host's catalog changes before the request arrives, that request is rejected as stale. The guest then receives the next host snapshot and can request from the current catalog.
+They are included in the Party invite fragment so the guest receives the same network profile automatically.
 
-This prevents a stale ID from accidentally resolving to a different source state.
+That makes the feature appropriate for **ephemeral/time-limited TURN credentials**.
 
-## Party receipts
-
-The host's accept/refuse decision creates a Party receipt.
-
-For native media, an accepted Party receipt includes the Reality Ledger receipt ID created when the guest-role `ENQUEUE_TRACK` action is accepted by JukeRuntime.
-
-For hosted Suno media, a Party receipt records the host decision and source identity. It does not fabricate native audio evidence for the provider-hosted iframe.
+Do not use a long-lived administrative TURN password in a Party invite.
 
 ## Invite format
 
-An invite resembles:
+Default invite:
 
 ```text
-https://michaelwave369.github.io/JukeBot/?party=<room-id>&host=<host-peer-id>#key=<room-password>
+https://michaelwave369.github.io/JukeBot/
+?party=<room-id>&host=<host-peer-id>
+#key=<room-password>
 ```
 
-The room ID and expected host peer ID are routing/identity information.
+Custom transport invite:
 
-The room password is in the URL fragment so it remains browser-side during the normal GitHub Pages HTTP request.
+```text
+...?party=<room>&host=<host>
+#key=<room-password>&net=<base64url-transport-profile>
+```
 
-Do not post live Party invite links publicly unless you actually want strangers in that request room.
+The fragment stays browser-side during the ordinary GitHub Pages HTTP request.
 
-## Network model
+## Join failure guidance
 
-The current transport uses Trystero's default Nostr matchmaking strategy and WebRTC peer connections.
+JukeBot classifies common connection errors.
 
-Trystero handles peer discovery/signaling. Once a peer connection exists, Party protocol messages move over WebRTC data channels.
+ICE/WebRTC/timeout-style failures are surfaced as likely direct-connect problems and recommend an ephemeral TURN profile.
 
-Party protocol logic is separate from the transport implementation. A future self-hosted relay or LAN-oriented adapter can carry the same messages.
+Password/handshake failures recommend re-scanning the active QR.
 
-## Network caveats
+Offline/network failures recommend restoring connectivity before reconnecting.
 
-Peer-to-peer WebRTC can fail on restrictive NAT/firewall networks.
+## Authority remains unchanged
 
-Rung 3C is reserved for deployment hardening:
+Transport settings alter reachability, not authority.
 
-- configurable TURN service
-- optional self-hosted Trystero WebSocket relay
-- LAN-oriented transport/discovery
-- connection diagnostics
-- explicit relay policy controls
+A successful WebRTC connection does not grant a guest play, pause, skip, volume, crate, metadata or delete privileges.
 
-The Party protocol does not need to change for those additions.
+Accepted native requests still enter the ordinary Action Bus as a `guest` actor.
+
+Accepted Suno requests still select the hosted-source lane only.
+
+## Reconnect behavior
+
+Unresolved requests retain their original request IDs. Reconnect retries therefore dedupe instead of creating duplicate pending requests.
+
+## Next qualification
+
+Rung 3C2 adds an optional self-hosted WebSocket signaling adapter.
+
+Rung 3C3 then physically qualifies LAN/WAN/mobile/TURN behavior across real devices and restrictive network conditions.
