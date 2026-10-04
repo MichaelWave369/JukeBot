@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { JukeRuntime } from "../src/core/runtime";
-import type { Actor, JukeAction, Track } from "../src/core/types";
+import type { Actor, JukeAction, Receipt, RoomState, Track } from "../src/core/types";
 
 const operator: Actor = { id: "op", role: "operator" };
 const guest: Actor = { id: "guest", role: "guest" };
@@ -69,5 +69,56 @@ describe("JukeRuntime", () => {
     expect(receipts[0]?.stateHash).toMatch(/^[0-9a-f]{8}$/);
     expect(receipts[1]?.accepted).toBe(false);
     expect(receipts[1]?.reason).toContain("not authorized");
+  });
+
+  it("hydrates a previously persisted room and ledger without creating fake actions", () => {
+    const restoredState: RoomState = {
+      roomId: "restored",
+      seq: 42,
+      transport: "stopped",
+      currentTrackId: "a",
+      queue: ["b"],
+      tracks: { a: trackA, b: trackB },
+      volume: 0.55,
+      repeat: "all",
+    };
+    const restoredReceipt: Receipt = {
+      receiptId: "deadbeef",
+      seq: 42,
+      at: "saved-time",
+      actionId: "saved-action",
+      actor: operator,
+      action: { type: "PLAY" },
+      accepted: true,
+      stateHash: "cafebabe",
+    };
+
+    const runtime = new JukeRuntime(
+      "ignored",
+      () => "new-time",
+      restoredState,
+      [restoredReceipt],
+    );
+
+    expect(runtime.observe()).toEqual(restoredState);
+    expect(runtime.ledger()).toEqual([restoredReceipt]);
+  });
+
+  it("lets only privileged human seats delete durable crate entries", () => {
+    const runtime = new JukeRuntime();
+    submit(runtime, operator, { type: "ADD_TRACK", track: trackA }, 1);
+    submit(runtime, operator, { type: "ADD_TRACK", track: trackB }, 2);
+    submit(runtime, operator, { type: "ENQUEUE_TRACK", trackId: "a" }, 3);
+    submit(runtime, operator, { type: "PLAY" }, 4);
+
+    const refused = submit(runtime, agent, { type: "REMOVE_TRACK", trackId: "a" }, 5);
+    expect(refused.receipt.accepted).toBe(false);
+    expect(runtime.observe().tracks.a).toBeDefined();
+
+    const removed = submit(runtime, operator, { type: "REMOVE_TRACK", trackId: "a" }, 6);
+    expect(removed.receipt.accepted).toBe(true);
+    expect(runtime.observe().tracks.a).toBeUndefined();
+    expect(runtime.observe().currentTrackId).toBeNull();
+    expect(runtime.observe().transport).toBe("stopped");
   });
 });
