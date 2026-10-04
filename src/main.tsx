@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { validateReplay } from "./core/replay";
 import { JukeRuntime } from "./core/runtime";
 import type { Actor, JukeAction } from "./core/types";
 import { JukePersistence } from "./persistence/indexedDb";
@@ -9,8 +10,10 @@ import "./styles.css";
 declare global {
   interface Window {
     JukeBot: {
+      version: string;
       observe: () => ReturnType<JukeRuntime["observe"]>;
       ledger: () => ReturnType<JukeRuntime["ledger"]>;
+      replay: () => ReturnType<typeof validateReplay>;
       submit: (action: JukeAction, actor?: Actor) => ReturnType<JukeRuntime["submit"]>;
       persistence: "indexeddb" | "ephemeral";
     };
@@ -37,8 +40,10 @@ async function bootstrap() {
   }
 
   window.JukeBot = {
+    version: "0.3.0",
     observe: () => runtime.observe(),
     ledger: () => runtime.ledger(),
+    replay: () => validateReplay(runtime.ledger(), runtime.observe().roomId),
     submit: (action, actor = operator) =>
       runtime.submit({ actionId: id("act"), actor, action }),
     persistence: persistence ? "indexeddb" : "ephemeral",
