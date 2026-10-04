@@ -6,17 +6,27 @@ Live site:
 
 **https://michaelwave369.github.io/JukeBot/**
 
-JukeBot is deliberately not just a music-player UI. Its core rule is that every controller uses the same governed action boundary:
+JukeBot is deliberately not just a music-player UI. Its core rule is that every controller uses the same governed boundary:
 
 ```text
-Controller -> Observation -> Action Bus -> Authority -> Room State
-                                            |
-                                            +-> Receipt Ledger
-                                                     |
-                         Replay / Native Audio / Source Adapters / Persistence
+Local / Guest / Agent / Script / Remote Peer
+                    |
+                    v
+               Request / Action
+                    |
+                    v
+                Authority
+                    |
+             +------+------+
+             |             |
+          native         hosted
+           room           source
+             |             |
+             v             v
+        Reality Ledger   source receipt
 ```
 
-## Current build — v0.4.0 / Rung 3A
+## Current build — v0.5.0 / Rung 3B
 
 ### Native deck
 - React + Vite live GitHub Pages app
@@ -27,30 +37,39 @@ Controller -> Observation -> Action Bus -> Authority -> Room State
 - persistent named playlists
 
 ### Suno Deck
-- persist a Suno playlist share URL as source provenance
-- paste canonical Suno song or embed URLs
-- optional `Track Title | https://suno.com/song/...` input
-- deduplicate songs by Suno song UUID
-- hosted Suno player rendered inside JukeBot
-- JukeBot previous / next / direct track selection
-- open the original Suno song or playlist in one click
-- Suno source playlists persist in IndexedDB v3
-- Suno manifests survive JukeBot session export/import
+- persistent Suno playlist provenance
+- canonical Suno song/embed parsing
+- hosted Suno player inside JukeBot
+- previous / next / direct selection
+- Suno manifests survive session export/import
+- no scraping or guessed CDN audio URLs
 
-JukeBot does **not** scrape Suno pages, call private Suno endpoints or guess CDN audio URLs.
+### Party Room
+- host can open a live cross-device request room from the GitHub Pages build
+- invite is shareable as QR code or URL
+- guests browse a safe request catalog from a phone
+- native media URLs and local `blob:` URLs are never sent to guests
+- native and Suno selections stay in separate source namespaces
+- guests can request; only the host can accept/refuse
+- accepted native requests enter the existing Action Bus as a real `guest` actor
+- accepted Suno requests switch the hosted Suno selection
+- duplicate reconnect retries reuse the same request ID and do not create duplicate pending requests
+- stale guest catalogs are rejected and refreshed
+- host decisions create Party receipts
+- accepted native Party receipts point to the resulting native Reality Ledger receipt
 
-The embedded Suno player owns actual hosted playback. JukeBot can select which player is active, but does not claim song-ended or playback-position evidence that Suno has not exposed through a supported integration contract.
+The live network transport uses browser-to-browser WebRTC. JukeBot uses Trystero's default Nostr matchmaking strategy only to discover peers; room payloads move peer-to-peer after connection.
 
-See [docs/SUNO_DECK.md](docs/SUNO_DECK.md).
+The room password is encoded in the invite URL fragment rather than normal query parameters. The invite also pins the expected host peer ID so a guest ignores host-like messages from other peers in the room.
+
+See [docs/PARTY_ROOM.md](docs/PARTY_ROOM.md).
 
 ### Portable evidence
-- `room-v2` state hashes normalize temporary local `blob:` URLs
-- deterministic receipt replay validator
-- replay states: `EXACT`, `MIXED_LEGACY`, `PARTIAL`, `MISMATCH`, `EMPTY`
-- legacy receipts remain explicitly legacy
+- `room-v2` hashes normalize temporary local `blob:` URLs
+- deterministic native receipt replay
+- `EXACT`, `MIXED_LEGACY`, `PARTIAL`, `MISMATCH`, `EMPTY`
 - portable JSON session export/import
-- import refuses a deterministic replay mismatch
-- missing local audio is reported rather than fabricated
+- missing local audio is reported instead of fabricated
 
 ## Run locally
 
@@ -71,8 +90,6 @@ npm run check
 
 ## Agent/script API
 
-Open the browser console:
-
 ```js
 JukeBot.version
 JukeBot.observe()
@@ -88,41 +105,37 @@ JukeBot.submit({
 })
 ```
 
-Controllers do not receive a privileged native-playback back door. They submit normal actions and authority decides whether those actions are allowed.
+Party guests do not receive this operator surface. Their phone sends source requests through the Party protocol; the host decides whether those requests become effects.
 
 ## Persistence model
 
 IndexedDB v3 stores:
 
 - local media bytes
-- active room snapshot
-- up to the latest 1,000 receipts
-- native JukeBot playlists
+- active native room snapshot
+- up to the latest 1,000 native receipts
+- native playlists
 - Suno source playlists
 
-Runtime-only `blob:` URLs are regenerated when JukeBot starts again.
-
-Remote native tracks store their direct playable URL rather than copying media bytes.
-
-JukeBot intentionally restores native playback in the stopped state so browser autoplay policy and operator intent remain authoritative.
+Party rooms are intentionally ephemeral in v0.5.0. Stopping the room drops the live peer session and its Party receipts.
 
 ## Session bundles
 
-Session bundles are JSON evidence and library manifests. They contain:
+Session bundles contain:
 
-- portable room snapshot
-- room hash
-- receipt ledger
+- portable native room snapshot
+- native room hash
+- native receipt ledger
 - native playlists
-- Suno playlist/source manifests
+- Suno source manifests
 - track metadata
 - remote native-track URLs when applicable
 
-They do **not** contain local audio bytes or Suno-hosted audio bytes.
+They do not contain local audio bytes, Suno-hosted audio bytes, Party room passwords, or live peer identifiers.
 
 ## Audio policy
 
-JukeBot does not ship copyrighted music and does not bypass streaming-service protections. Native playback uses audio the operator supplies locally or through a direct playable URL. Suno playback remains hosted by Suno inside its player.
+JukeBot does not ship copyrighted music and does not bypass streaming-service protections. Native playback uses media the operator supplies. Suno playback remains hosted by Suno inside its player.
 
 ## Architecture and roadmap
 
