@@ -8,7 +8,7 @@ Live site:
 
 JukeBot is deliberately not just a music-player UI. Every controller shares governed boundaries rather than privileged back doors.
 
-## Current build — v0.7.0 / Rung 3C2
+## Current build — v0.8.0 / Rung 3C3
 
 ### Native deck
 - local audio files and direct playable audio URLs
@@ -33,86 +33,66 @@ JukeBot is deliberately not just a music-player UI. Every controller shares gove
 - stale-catalog rejection
 - Party receipts linked to native Reality Ledger receipts when applicable
 
-### Signaling strategies
+### Signaling
+- default Nostr matchmaking
+- optional custom Nostr relays
+- controlled self-hosted WebSocket relay lane
+- controlled mode fails closed
+- optional TURN fallback
+- relay health/status smoke-tested in CI
 
-Party Room now has two explicit signaling strategies.
+### Physical network qualification
 
-#### Nostr matchmaking
+JukeBot now includes a field qualification harness inside the Party Room host UI.
 
-Default lane:
+The harness covers nine required scenarios:
+
+- same-LAN Nostr
+- cellular/WAN Nostr
+- controlled WebSocket relay
+- TURN fallback
+- disconnect/reconnect idempotency
+- multiple simultaneous guests
+- native Reality Ledger linkage
+- Suno hosted-source acceptance
+- host stop/restart/rejoin
+
+The overall result can only become:
 
 ```text
-JukeBot host/guest
-      |
-      v
-Trystero Nostr signaling
-      |
-      v
-WebRTC peer connection
+FIELD_QUALIFIED
 ```
 
-The host may use the default Nostr pool or explicit Nostr relay URLs.
+when every required scenario is PASS and each PASS has matching machine evidence plus a field note.
 
-#### Controlled WebSocket relay
+Otherwise the result stays `PARTIAL` or becomes `FAIL`.
 
-Operator-owned lane:
+The qualification export uses schema:
 
 ```text
-JukeBot host/guest
-      |
-      v
-@trystero-p2p/ws-relay
-      |
-      v
-your wss:// relay
-      |
-      v
-WebRTC peer connection
+jukebot.party.qualification.v1
 ```
 
-Controlled mode is **fail-closed**. It requires at least one explicit relay URL and does not silently fall back to public Nostr.
+It deliberately excludes:
 
-The relay carries signaling used to establish WebRTC. Party application payloads continue peer-to-peer after the connection forms.
+- Party secrets
+- TURN credentials
+- relay URLs
+- peer IDs
+- IP addresses
+- media URLs and bytes
 
-### Included relay service
+See [docs/QUALIFICATION.md](docs/QUALIFICATION.md).
 
-The repository contains a runnable relay in `relay/`.
+## Validation
 
 ```bash
-npm install
-npm run relay:start
+npm run check
 ```
 
-Endpoints:
+The software gate validates runtime, replay, Suno, Party protocol, transport profiles, controlled relay boot/health/status/shutdown, qualification logic, TypeScript and the production build.
 
-- `GET /healthz`
-- `GET /status`
-
-A Dockerfile is included at `relay/Dockerfile`.
-
-For GitHub Pages clients, expose the service behind TLS as a `wss://` endpoint.
-
-### Validation
-
-`npm run check` now includes:
-
-- runtime tests
-- replay tests
-- Suno tests
-- Party protocol/transport tests
-- controlled relay process smoke test
-- TypeScript validation
-- production Vite build
-
-The relay smoke test boots the service on an ephemeral port, verifies `/healthz` and `/status`, and shuts it down cleanly.
-
-### TURN
-
-Both signaling strategies can use the existing optional TURN profile for restrictive NAT/firewall cases.
-
-TURN credentials remain session-only and should be ephemeral/time-limited.
-
-See [docs/PARTY_ROOM.md](docs/PARTY_ROOM.md) and [relay/README.md](relay/README.md).
+CI does **not** claim physical qualification. Real devices must complete the field matrix.
 
 ## Run locally
 
@@ -124,6 +104,14 @@ cd JukeBot
 npm install
 npm run dev
 ```
+
+## Controlled relay
+
+```bash
+npm run relay:start
+```
+
+See [relay/README.md](relay/README.md).
 
 ## Agent/script API
 
@@ -139,7 +127,7 @@ JukeBot.submit(...)
 
 IndexedDB stores local media, native room state, recent receipts, native playlists and Suno source playlists.
 
-Party room secrets, live peer IDs, TURN credentials and controlled-relay session settings are not written into session bundles.
+The qualification session stores only safe evidence locally in the browser. Party secrets, peer IDs, TURN credentials and media URLs are excluded.
 
 ## Audio policy
 
