@@ -74,7 +74,7 @@ describe("receipt replay", () => {
       {
         type: "UPDATE_TRACK_METADATA",
         trackId: "local-a",
-        patch: { artist: "Field Unit", tags: ["funk", "live"] },
+        patch: { artist: "Field Unit", tags: ["funk", "live"] as string[] },
       } as const,
     ];
 
