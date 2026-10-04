@@ -1,4 +1,11 @@
-import { joinRoom, selfId } from "trystero";
+import {
+  joinRoom as joinNostrRoom,
+  selfId as nostrSelfId,
+} from "trystero";
+import {
+  joinRoom as joinWsRelayRoom,
+  selfId as wsRelaySelfId,
+} from "@trystero-p2p/ws-relay";
 import type {
   PartyDecision,
   PartyGuestHello,
@@ -6,7 +13,10 @@ import type {
   PartyHostSnapshot,
   PartyTransportProfile,
 } from "./types";
-import { normalizeTransportProfile } from "./transport";
+import {
+  controlledRelayReady,
+  normalizeTransportProfile,
+} from "./transport";
 
 const APP_ID = "io.github.michaelwave369.jukebot.party.v1";
 
@@ -40,15 +50,11 @@ export function createPartyNetwork(
 ): PartyNetwork {
   const profile = normalizeTransportProfile(transport);
 
-  const relayConfig = profile.relayUrls?.length
-    ? {
-        urls: profile.relayUrls,
-        warnOnRelayFailure: true,
-      }
-    : {
-        redundancy: profile.relayRedundancy ?? 5,
-        warnOnRelayFailure: true,
-      };
+  if (!controlledRelayReady(profile)) {
+    throw new Error(
+      "Controlled WebSocket relay mode requires at least one relay URL",
+    );
+  }
 
   const turnConfig = profile.turn?.map((server) => ({
     urls: server.urls,
@@ -56,20 +62,48 @@ export function createPartyNetwork(
     credential: server.credential,
   }));
 
-  const room = joinRoom(
-    {
-      appId: APP_ID,
-      password,
-      relayConfig,
-      turnConfig,
-    } as any,
-    roomId,
-    {
-      onJoinError: ({ error }) => {
-        handlers.onJoinError?.(String(error));
-      },
+  const callbacks = {
+    onJoinError: ({ error }: { error: unknown }) => {
+      handlers.onJoinError?.(String(error));
     },
-  );
+  };
+
+  const room =
+    profile.strategy === "ws-relay"
+      ? joinWsRelayRoom(
+          {
+            appId: APP_ID,
+            password,
+            relayConfig: {
+              urls: profile.relayUrls!,
+              warnOnRelayFailure: true,
+            },
+            turnConfig,
+          } as any,
+          roomId,
+          callbacks,
+        )
+      : joinNostrRoom(
+          {
+            appId: APP_ID,
+            password,
+            relayConfig: profile.relayUrls?.length
+              ? {
+                  urls: profile.relayUrls,
+                  warnOnRelayFailure: true,
+                }
+              : {
+                  redundancy: profile.relayRedundancy ?? 5,
+                  warnOnRelayFailure: true,
+                },
+            turnConfig,
+          } as any,
+          roomId,
+          callbacks,
+        );
+
+  const selfPeerId =
+    profile.strategy === "ws-relay" ? wsRelaySelfId : nostrSelfId;
 
   // Trystero's wire generic requires a dictionary-shaped JSON payload.
   // Keep that permissiveness at this serialization seam only; JukeBot's
@@ -95,7 +129,7 @@ export function createPartyNetwork(
     handlers.onDecision?.(data as PartyDecision, peerId);
 
   return {
-    selfPeerId: selfId,
+    selfPeerId,
     peerIds: () => Object.keys(room.getPeers()),
     sendSnapshot: async (snapshot, target) => {
       await snapshotAction.send(
