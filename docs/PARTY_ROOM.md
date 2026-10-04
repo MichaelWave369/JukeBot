@@ -2,149 +2,97 @@
 
 Party Room turns the live GitHub Pages JukeBot into a cross-device request room without giving guests playback authority.
 
-## Normal host flow
+## Host flow
 
 1. Open JukeBot on the playback/library device.
-2. Expand **TRANSPORT PROFILE**.
-3. Choose a signaling strategy.
-4. Press **START PARTY ROOM**.
-5. Show the QR code or copy the invite link.
-6. Guests scan the invite and request tracks.
-7. Accept or refuse each request.
+2. Choose a signaling strategy under **TRANSPORT PROFILE**.
+3. Start the Party Room.
+4. Show the QR code or copy the invite.
+5. Guests request tracks.
+6. Host accepts or refuses each request.
+7. Use **FIELD EVIDENCE** to record physical qualification runs.
 
-## Strategy 1 — Nostr matchmaking
+## Signaling strategies
 
-This remains the default.
+### Nostr matchmaking
 
-Use:
+Default strategy.
 
-```text
-SIGNALING STRATEGY = NOSTR MATCHMAKING
-```
+You may use Trystero's default Nostr pool or explicit custom Nostr relay URLs.
 
-With no custom URLs, Trystero uses its normal Nostr relay pool.
+### Controlled WebSocket relay
 
-You can instead supply custom Nostr `wss://` relay URLs.
+Choose **CONTROLLED WS RELAY** and provide at least one ws/wss relay URL.
 
-## Strategy 2 — Controlled WebSocket relay
+Controlled mode fails closed. It never silently falls back to Nostr.
 
-Use:
-
-```text
-SIGNALING STRATEGY = CONTROLLED WS RELAY
-```
-
-Then provide one or more relay URLs:
-
-```text
-wss://relay.example.com
-```
-
-Controlled mode is fail-closed.
-
-If no valid relay URL exists, JukeBot will not start the room.
-
-It will not quietly use Nostr instead.
-
-## Run the included relay
-
-From the repository root:
+The repository includes a relay runtime:
 
 ```bash
-npm install
 npm run relay:start
 ```
 
-Default local endpoint:
-
-```text
-ws://localhost:8080
-```
-
-Health:
-
-```text
-http://localhost:8080/healthz
-```
-
-Status:
-
-```text
-http://localhost:8080/status
-```
-
-The status response includes uptime, active subscription count and configured limits.
-
-For a GitHub Pages client, expose the relay through TLS as `wss://`.
-
 See [../relay/README.md](../relay/README.md).
 
-## What the relay sees
+## TURN
 
-The controlled relay is signaling infrastructure used by Trystero to establish WebRTC peers.
+TURN is independent of signaling.
 
-It is not JukeBot playback authority.
+- signaling answers how peers exchange WebRTC connection information
+- TURN relays WebRTC traffic when peers cannot establish a direct path
 
-It does not receive the host's local audio crate as a media service.
+TURN credentials are session-only and should be short-lived.
 
-Once peers establish the WebRTC connection, JukeBot Party messages use that peer connection.
+## Safe guest catalog
 
-## TURN fallback
+Guests receive requestable metadata, not native audio source URLs.
 
-Both Nostr and controlled relay strategies support the existing optional TURN profile.
+The Party catalog excludes:
 
-TURN solves a different problem:
+- local Blob URLs
+- direct host audio URLs
+- local media bytes
+- IndexedDB records
 
-- signaling relay: helps peers discover/exchange WebRTC signaling
-- TURN: relays WebRTC traffic when peers cannot establish a direct path
+## Host authority
 
-TURN credentials remain session-only and should be ephemeral/time-limited.
+Guests cannot directly play, pause, skip, change volume, edit metadata, mutate the crate or delete media.
 
-## Invite profile
+Accepted native requests enter the normal Action Bus as a `guest` actor.
 
-The invite fragment can carry:
+Accepted Suno requests select the hosted-source lane.
 
-- room password
-- signaling strategy
-- relay URLs
-- optional TURN profile
+## Reconnect behavior
 
-Example:
+Unresolved guest requests retain their request ID.
 
-```text
-...?party=<room>&host=<host>
-#key=<room-secret>&net=<encoded-profile>
-```
+Identical reconnect retries dedupe.
 
-The guest automatically applies the host-selected strategy.
+Reused IDs with different content conflict.
 
-## Diagnostics
-
-The Party panel reports:
-
-- secure context
-- WebRTC
-- Web Crypto
-- WebSocket
-- online state
-- signaling strategy/profile
-- TURN fallback
-
-Relay/socket failures are classified separately from ICE/TURN failures.
-
-## Authority remains unchanged
-
-Transport selection changes reachability, not permissions.
-
-Guests still cannot directly play, pause, skip, change volume, mutate the crate or bypass host accept/refuse.
+Stale catalog requests are rejected.
 
 ## Physical qualification
 
-Rung 3C3 will qualify the full system on real devices and network paths:
+The host UI captures safe counters for:
 
-- same-LAN PC ↔ phone
-- WAN/cellular guest
-- controlled relay
-- restrictive NAT with TURN
-- disconnect/reconnect soak
-- multiple simultaneous guests
+- room starts/stops
+- peer joins/leaves
+- maximum simultaneous peers
+- duplicate retries
+- stale/conflicting/unknown requests
+- join errors
+- accepted/refused requests
+- linked native effect receipts
+- accepted Suno requests
+
+The **FIELD EVIDENCE** panel uses those counters together with the active safe transport profile.
+
+A scenario PASS requires:
+
+1. a human field note describing the physical setup/observation
+2. the machine evidence required by that scenario
+
+The export does not include secrets or identifiers.
+
+See [QUALIFICATION.md](QUALIFICATION.md) for the complete nine-scenario procedure.
