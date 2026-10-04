@@ -54,7 +54,9 @@ export class JukeRuntime {
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
-    return () => {\n      this.listeners.delete(listener);\n    };
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   submit(envelope: ActionEnvelope): SubmissionResult {
