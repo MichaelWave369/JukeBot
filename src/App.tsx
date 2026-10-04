@@ -277,7 +277,7 @@ export function App({ runtime, persistence }: AppProps) {
   }
 
   function exportSession() {
-    const bundle = createBundle(state, receipts, playlists, sunoPlaylists);
+    const bundle = createBundle(state, receipts, playlists, new Date().toISOString(), sunoPlaylists);
     const blob = new Blob([JSON.stringify(bundle, null, 2)], {
       type: "application/json",
     });
