@@ -1089,3 +1089,32 @@ textarea {
     grid-column: auto;
   }
 }
+
+
+/* Controlled relay strategy */
+.transport-form select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #ffffff20;
+  border-radius: .65rem;
+  background: #09090c;
+  color: #eee;
+  padding: .65rem .8rem;
+  font: inherit;
+}
+
+.transport-relay-field {
+  min-width: 0;
+}
+
+button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@media (min-width: 981px) {
+  .transport-form {
+    grid-template-columns: .9fr 1.5fr .55fr 1fr 1fr 1fr;
+  }
+}
