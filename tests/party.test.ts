@@ -268,6 +268,7 @@ describe("Party transport hardening", () => {
 
     expect(profile).toEqual({
       version: 1,
+      strategy: "nostr",
       relayUrls: ["wss://relay-a.example"],
       relayRedundancy: undefined,
       turn: [
