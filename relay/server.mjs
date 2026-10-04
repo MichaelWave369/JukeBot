@@ -10,7 +10,7 @@ function intEnv(name, fallback, min, max) {
 }
 
 const host = process.env.HOST?.trim() || "0.0.0.0";
-const port = intEnv("PORT", 8080, 1, 65535);
+const port = intEnv("PORT", 8080, 0, 65535);
 const maxTopicLength = intEnv("MAX_TOPIC_LENGTH", 256, 32, 4096);
 const maxSubscriptionsPerSocket = intEnv(
   "MAX_SUBSCRIPTIONS_PER_SOCKET",
