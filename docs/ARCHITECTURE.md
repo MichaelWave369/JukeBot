@@ -2,7 +2,7 @@
 
 JukeBot is built as a music runtime first and a visual jukebox second.
 
-## Native authority path
+## Native authority
 
 ```text
 Human / DJ / Agent / Script
@@ -20,7 +20,7 @@ Human / DJ / Agent / Script
    Reality Ledger
 ```
 
-Remote guests do not get a direct Action Bus handle.
+Remote guests do not receive a direct Action Bus handle.
 
 ## Party request path
 
@@ -31,107 +31,109 @@ Guest
 PartyGuestRequest
   |
   v
-signaling-selected WebRTC peer
+selected signaling strategy
+  |
+  v
+WebRTC peer
   |
   v
 Host Party engine
   |
-  +--> dedupe / catalog / source validation
+  +--> dedupe / freshness / source validation
   |
   v
 Host ACCEPT / REFUSE
   |
   +--> PartyReceipt
   |
-  +--> native -> guest-role Action Bus -> Reality Ledger
+  +--> native -> guest Action Bus -> Reality Ledger
   |
   +--> Suno -> hosted-source selection
 ```
 
-## Signaling strategy boundary
-
-`src/party/network.ts` supports two strategies behind the same Party protocol.
+## Signaling strategies
 
 ### Nostr
 
-```text
-trystero
-  -> Nostr signaling
-  -> WebRTC
-```
-
-Nostr is the default.
+Default Trystero Nostr matchmaking.
 
 ### Controlled WebSocket relay
 
+`@trystero-p2p/ws-relay` with explicit operator-controlled relay URLs.
+
+Controlled mode is fail-closed and does not fall back to Nostr.
+
+## TURN
+
+TURN remains independent of signaling strategy and is used only when direct WebRTC connectivity requires relay assistance.
+
+## Physical qualification boundary
+
+Software correctness and physical network readiness are separate claims.
+
+CI can prove:
+
+- deterministic qualification rules
+- safe evidence serialization
+- secret exclusion
+- controlled relay process health
+- protocol invariants
+- client build correctness
+
+CI cannot prove:
+
+- two real devices can connect on the operator's LAN
+- a cellular client reaches the host
+- a real NAT path requires and succeeds through TURN
+- multiple physical clients coexist
+- physical disconnect/reconnect behavior
+
+Those claims belong to `jukebot.party.qualification.v1`.
+
+## Qualification evidence
+
+Host-side observation counters contain no peer identifiers.
+
+Scenario snapshots contain only:
+
+- signaling strategy
+- relay count
+- default relay redundancy when applicable
+- whether TURN was configured
+- TURN server count
+- browser capability booleans
+- safe aggregate observation counters
+- operator notes
+- timestamps
+
+They exclude:
+
+- room password
+- TURN username/credential
+- relay URL
+- peer ID
+- IP address
+- media URL
+- media bytes
+
+## Qualification states
+
 ```text
-@trystero-p2p/ws-relay
-  -> operator-controlled WebSocket signaling
-  -> WebRTC
+FIELD_QUALIFIED
+PARTIAL
+FAIL
 ```
 
-Controlled mode requires explicit relay URLs.
+A claimed PASS with contradictory machine evidence forces the aggregate result to FAIL.
 
-There is no silent fallback from controlled mode to Nostr.
+BLOCKED and NOT_RUN remain PARTIAL.
 
-The transport profile travels in the Party invite fragment so host and guest select the same strategy.
-
-## Controlled relay service
-
-`relay/server.mjs` uses the official `createWsRelayServer` server boundary.
-
-The service:
-
-- attaches WebSocket signaling to a Node HTTP server
-- exposes `/healthz`
-- exposes `/status`
-- applies bounded topic/subscription defaults
-- supports graceful SIGINT/SIGTERM shutdown
-
-The relay transports signaling topics, not JukeBot media.
-
-## TURN boundary
-
-TURN remains independent of signaling strategy.
-
-A signaling relay answers "how do peers exchange connection information?"
-
-TURN answers "what if those peers cannot establish a direct network path?"
-
-Both Nostr and controlled WebSocket signaling can be combined with the same TURN profile.
-
-## Safe catalog
-
-Guests receive requestable metadata only.
-
-Native media source URLs, IndexedDB Blob URLs and host-private media bytes are not exposed through the Party catalog.
-
-## Request idempotency
-
-Each request has a stable request ID and catalog hash.
-
-Reconnect retries reuse the same request envelope. Identical retries dedupe; conflicting reuse is rejected.
+Only all required PASS outcomes can yield FIELD_QUALIFIED.
 
 ## Persistence
 
-Party room secrets, peer IDs, TURN credentials and signaling profiles are ephemeral.
+Native media and room state use IndexedDB.
 
-They are not written into portable JukeBot session bundles.
+Qualification evidence uses a separate browser-local record because it is a test artifact, not authoritative playback state.
 
-## Validation
-
-The CI gate validates:
-
-- deterministic runtime
-- portable replay
-- Suno source parsing
-- Party protocol/transport profile rules
-- controlled relay process boot
-- relay health/status responses
-- clean relay shutdown
-- TypeScript
-- production client build
-
-## Next boundary
-
-Rung 3C3 moves from software qualification to physical network qualification across real browsers, devices and NAT paths.
+Party secrets and live identifiers are never included in portable qualification exports.
