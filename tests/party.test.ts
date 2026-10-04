@@ -12,6 +12,11 @@ import type {
   PartyGuestRequest,
   PartyInvite,
 } from "../src/party/types";
+import {
+  classifyJoinIssue,
+  normalizeTransportProfile,
+  transportProfileFromInputs,
+} from "../src/party/transport";
 import type { RoomState, SunoPlaylist } from "../src/core/types";
 
 const room: RoomState = {
@@ -94,6 +99,55 @@ describe("Party invite", () => {
       roomId: "room123",
       hostPeerId: "host456",
       password: "super-secret-room-key",
+    });
+  });
+
+  it("round-trips custom relays and ephemeral TURN only through the fragment", () => {
+    const invite: PartyInvite = {
+      protocol: "jukebot.party.v1",
+      roomId: "room-net",
+      hostPeerId: "host-net",
+      password: "room-secret",
+      transport: {
+        version: 1,
+        relayUrls: ["wss://relay.example"],
+        turn: [
+          {
+            urls: ["turns:turn.example:5349"],
+            username: "ephemeral-user",
+            credential: "ephemeral-pass",
+          },
+        ],
+      },
+    };
+
+    const url = buildPartyInviteUrl(
+      invite,
+      "https://michaelwave369.github.io/JukeBot/",
+    );
+    const parsedUrl = new URL(url);
+
+    expect(parsedUrl.search).not.toContain("relay.example");
+    expect(parsedUrl.search).not.toContain("turn.example");
+    expect(parsedUrl.search).not.toContain("ephemeral-pass");
+    expect(parsedUrl.hash).toContain("net=");
+
+    expect(parsePartyInviteUrl(url)).toEqual({
+      roomId: "room-net",
+      hostPeerId: "host-net",
+      password: "room-secret",
+      transport: {
+        version: 1,
+        relayUrls: ["wss://relay.example"],
+        relayRedundancy: undefined,
+        turn: [
+          {
+            urls: ["turns:turn.example:5349"],
+            username: "ephemeral-user",
+            credential: "ephemeral-pass",
+          },
+        ],
+      },
     });
   });
 });
@@ -190,5 +244,57 @@ describe("Party host request engine", () => {
     expect(engine.ledger()).toHaveLength(1);
     expect(engine.ledger()[0]?.effectReceiptId).toBe("native-receipt");
     expect(engine.pending()).toEqual([]);
+  });
+});
+
+
+describe("Party transport hardening", () => {
+  it("normalizes relay and TURN inputs while rejecting invalid schemes", () => {
+    const profile = transportProfileFromInputs({
+      relayUrls: [
+        "wss://relay-a.example",
+        "https://not-a-websocket.example",
+        "wss://relay-a.example",
+      ].join("\n"),
+      relayRedundancy: 99,
+      turnUrl: "turns:turn.example:5349, https://not-turn.example",
+      turnUsername: " user ",
+      turnCredential: " pass ",
+    });
+
+    expect(profile).toEqual({
+      version: 1,
+      relayUrls: ["wss://relay-a.example"],
+      relayRedundancy: undefined,
+      turn: [
+        {
+          urls: ["turns:turn.example:5349"],
+          username: "user",
+          credential: "pass",
+        },
+      ],
+    });
+  });
+
+  it("clamps default relay redundancy when custom relay URLs are absent", () => {
+    expect(
+      normalizeTransportProfile({
+        version: 1,
+        relayRedundancy: 99,
+      }).relayRedundancy,
+    ).toBe(10);
+
+    expect(
+      normalizeTransportProfile({
+        version: 1,
+        relayRedundancy: 0,
+      }).relayRedundancy,
+    ).toBe(1);
+  });
+
+  it("classifies connection/ICE failures as likely TURN cases", () => {
+    const issue = classifyJoinIssue("WebRTC ICE connection timeout");
+    expect(issue.kind).toBe("turn-likely");
+    expect(issue.suggestion.toLowerCase()).toContain("turn");
   });
 });
