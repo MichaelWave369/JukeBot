@@ -1,5 +1,18 @@
 export type PartySourceKind = "native" | "suno";
 
+export interface PartyTurnServer {
+  urls: string[];
+  username?: string;
+  credential?: string;
+}
+
+export interface PartyTransportProfile {
+  version: 1;
+  relayUrls?: string[];
+  relayRedundancy?: number;
+  turn?: PartyTurnServer[];
+}
+
 export interface PartyNativeCatalogItem {
   kind: "native";
   trackId: string;
@@ -100,10 +113,12 @@ export interface PartyInvite {
   roomId: string;
   hostPeerId: string;
   password: string;
+  transport?: PartyTransportProfile;
 }
 
 export interface PartyJoinInfo {
   roomId: string;
   hostPeerId: string;
   password: string;
+  transport?: PartyTransportProfile;
 }
