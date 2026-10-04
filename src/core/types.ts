@@ -38,6 +38,21 @@ export interface Playlist {
   updatedAt: string;
 }
 
+export interface SunoTrackRef {
+  songId: string;
+  title: string;
+  songUrl: string;
+}
+
+export interface SunoPlaylist {
+  id: string;
+  name: string;
+  playlistUrl?: string;
+  tracks: SunoTrackRef[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type TransportState = "stopped" | "playing" | "paused";
 export type RepeatMode = "off" | "one" | "all";
 

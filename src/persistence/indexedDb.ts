@@ -4,15 +4,17 @@ import type {
   Playlist,
   Receipt,
   RoomState,
+  SunoPlaylist,
   Track,
   TrackMetadataPatch,
 } from "../core/types";
 
 const DB_NAME = "jukebot";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const MEDIA_STORE = "media";
 const SESSION_STORE = "session";
 const PLAYLIST_STORE = "playlists";
+const SUNO_PLAYLIST_STORE = "suno_playlists";
 const ACTIVE_SESSION = "active";
 
 interface StoredMedia {
@@ -38,6 +40,7 @@ export interface RestoredSession {
   state: RoomState;
   receipts: Receipt[];
   playlists: Playlist[];
+  sunoPlaylists: SunoPlaylist[];
 }
 
 function request<T>(req: IDBRequest<T>): Promise<T> {
@@ -69,6 +72,9 @@ function openDatabase(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(PLAYLIST_STORE)) {
         db.createObjectStore(PLAYLIST_STORE, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(SUNO_PLAYLIST_STORE)) {
+        db.createObjectStore(SUNO_PLAYLIST_STORE, { keyPath: "id" });
       }
     };
 
@@ -114,6 +120,13 @@ function storedToTrack(stored: StoredMedia): Track | null {
     sourceType: stored.sourceType,
     source,
     addedAt: stored.addedAt,
+  };
+}
+
+function cloneSunoPlaylist(playlist: SunoPlaylist): SunoPlaylist {
+  return {
+    ...playlist,
+    tracks: playlist.tracks.map((track) => ({ ...track })),
   };
 }
 
@@ -234,6 +247,32 @@ export class JukePersistence {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
+  async saveSunoPlaylist(playlist: SunoPlaylist): Promise<void> {
+    const db = await this.dbPromise;
+    const tx = db.transaction(SUNO_PLAYLIST_STORE, "readwrite");
+    tx.objectStore(SUNO_PLAYLIST_STORE).put(cloneSunoPlaylist(playlist));
+    await transactionDone(tx);
+  }
+
+  async deleteSunoPlaylist(playlistId: string): Promise<void> {
+    const db = await this.dbPromise;
+    const tx = db.transaction(SUNO_PLAYLIST_STORE, "readwrite");
+    tx.objectStore(SUNO_PLAYLIST_STORE).delete(playlistId);
+    await transactionDone(tx);
+  }
+
+  async listSunoPlaylists(): Promise<SunoPlaylist[]> {
+    const db = await this.dbPromise;
+    const tx = db.transaction(SUNO_PLAYLIST_STORE, "readonly");
+    const playlists = await request<SunoPlaylist[]>(
+      tx.objectStore(SUNO_PLAYLIST_STORE).getAll(),
+    );
+    await transactionDone(tx);
+    return playlists
+      .map(cloneSunoPlaylist)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
   async saveSession(state: RoomState, receipts: Receipt[]): Promise<void> {
     const db = await this.dbPromise;
     const tx = db.transaction(SESSION_STORE, "readwrite");
@@ -283,6 +322,10 @@ export class JukePersistence {
       await this.savePlaylist(playlist);
     }
 
+    for (const sunoPlaylist of bundle.sunoPlaylists ?? []) {
+      await this.saveSunoPlaylist(sunoPlaylist);
+    }
+
     await this.saveSession(bundle.room, bundle.receipts);
     return { missingLocalTrackIds };
   }
@@ -307,6 +350,7 @@ export class JukePersistence {
     }
 
     const playlists = await this.listPlaylists();
+    const sunoPlaylists = await this.listSunoPlaylists();
 
     if (!saved) {
       return {
@@ -316,6 +360,7 @@ export class JukePersistence {
         },
         receipts: [],
         playlists,
+        sunoPlaylists,
       };
     }
 
@@ -335,6 +380,7 @@ export class JukePersistence {
       },
       receipts: saved.receipts ?? [],
       playlists,
+      sunoPlaylists,
     };
   }
 

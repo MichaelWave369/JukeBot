@@ -1,5 +1,11 @@
 import { portableRoomState, roomStateHash } from "./hash";
-import type { Playlist, Receipt, RoomState, Track } from "./types";
+import type {
+  Playlist,
+  Receipt,
+  RoomState,
+  SunoPlaylist,
+  Track,
+} from "./types";
 import { validateReplay } from "./replay";
 
 export const JUKE_BUNDLE_SCHEMA = "jukebot.session.v1" as const;
@@ -21,6 +27,7 @@ export interface JukeBundle {
   roomHash: string;
   receipts: Receipt[];
   playlists: Playlist[];
+  sunoPlaylists?: SunoPlaylist[];
   media: MediaManifestEntry[];
 }
 
@@ -35,6 +42,7 @@ export function createBundle(
   receipts: Receipt[],
   playlists: Playlist[],
   exportedAt = new Date().toISOString(),
+  sunoPlaylists: SunoPlaylist[] = [],
 ): JukeBundle {
   const room = portableRoomState(state);
   return {
@@ -46,6 +54,10 @@ export function createBundle(
     playlists: playlists.map((playlist) => ({
       ...playlist,
       trackIds: [...playlist.trackIds],
+    })),
+    sunoPlaylists: sunoPlaylists.map((playlist) => ({
+      ...playlist,
+      tracks: playlist.tracks.map((track) => ({ ...track })),
     })),
     media: Object.values(state.tracks).map((track) => ({
       id: track.id,
@@ -67,6 +79,10 @@ export function parseBundle(input: string): JukeBundle {
   }
   if (!parsed.room || !Array.isArray(parsed.receipts) || !Array.isArray(parsed.media)) {
     throw new Error("Malformed JukeBot session bundle");
+  }
+
+  if (parsed.sunoPlaylists && !Array.isArray(parsed.sunoPlaylists)) {
+    throw new Error("Malformed Suno playlist manifest");
   }
 
   return parsed as JukeBundle;

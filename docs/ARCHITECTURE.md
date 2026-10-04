@@ -25,98 +25,125 @@ Human / DJ / Guest / Agent / Replay / Script / Remote Peer
                                 |
                          portable room-v2 hash
                                 |
-                 +--------------+--------------+
-                 |              |              |
-                 v              v              v
-              React UI      Audio Adapter   Persistence
-                 |                             |
-                 v                             v
-          Replay / Bundles                 IndexedDB
+          +---------------------+----------------------+
+          |                     |                      |
+          v                     v                      v
+       React UI          Native Audio Adapter      Persistence
+          |                                            |
+          v                                            v
+   Hosted Sources                                  IndexedDB v3
+     /      \
+ Suno Deck  future adapters
 ```
 
-No controller is allowed to mutate authoritative playback state directly.
+No controller is allowed to mutate authoritative native playback state directly.
 
 ## Runtime boundary
 
-`src/core/*` remains headless and browser-independent. React, IndexedDB, browser audio and future network adapters sit outside the deterministic reducer.
+`src/core/*` remains headless and browser-independent. React, IndexedDB, browser audio, hosted-source adapters and future network adapters sit outside the deterministic reducer.
 
 The runtime can be constructed from a previously saved room snapshot and ledger. Hydration does not fabricate controller actions or retroactively rewrite receipts.
+
+## Native audio vs hosted sources
+
+JukeBot distinguishes two different realities:
+
+### Native audio
+
+Local files and direct playable audio URLs are controlled by `BrowserAudioAdapter`. JukeBot owns their queue/transport state and can issue governed receipts for those actions.
+
+### Hosted sources
+
+A hosted source such as Suno keeps playback inside the provider's player.
+
+JukeBot may:
+
+- retain source provenance
+- select a hosted item
+- render the provider's hosted player
+- preserve a portable source manifest
+- provide navigation to the original provider page
+
+JukeBot must not claim provider-internal facts such as exact playback position, song-ended events or successful audio delivery unless the provider exposes a supported integration contract for those facts.
+
+## Suno Deck
+
+`src/sources/suno.ts` accepts canonical Suno song and embed URLs and extracts the stable song UUID.
+
+Supported source forms:
+
+```text
+https://suno.com/song/<uuid>
+https://suno.com/embed/<uuid>
+```
+
+Suno playlist URLs are stored separately as provenance:
+
+```text
+https://suno.com/playlist/<uuid>
+```
+
+The source adapter does not scrape playlist pages or derive direct CDN audio URLs.
+
+`src/components/SunoDeck.tsx` renders one active Suno-hosted player and lets the operator switch among a persisted Suno playlist manifest.
+
+## Durable persistence
+
+`src/persistence/indexedDb.ts` owns browser persistence.
+
+IndexedDB v3 stores:
+
+- media records and local audio Blobs
+- active room snapshot and up to 1,000 receipts
+- native named playlists
+- Suno source playlists
+
+Persistent native-crate deletion is privileged and also removes dangling native-playlist references.
 
 ## Portable room-v2 hashing
 
 Browser `blob:` URLs are temporary implementation details. They change when a local audio Blob is restored from IndexedDB.
 
-A ledger that hashed those literal URLs could describe the same local track with a different hash after restart.
-
-`room-v2` therefore hashes a portable projection of room state:
+`room-v2` hashes a portable projection of authoritative native room state:
 
 - local source URLs become `local://<track-id>`
 - track tags are canonicalized for hashing
 - meaningful metadata remains hash-relevant
-- remote URLs remain hash-relevant
+- remote native URLs remain hash-relevant
 
-New receipts explicitly carry `stateHashVersion: "room-v2"`.
-
-Receipts created before this rule are retained as legacy. The replay validator never silently upgrades a legacy hash.
+Hosted-source player internals are not silently folded into this native room hash.
 
 ## Replay validator
 
-`src/core/replay.ts` replays receipts from the deterministic initial room state.
-
-For each receipt it checks:
-
-1. current authority policy agrees with accepted/refused status
-2. accepted actions advance sequence exactly once
-3. rejected actions do not advance sequence
-4. room-v2 receipts reproduce their recorded state hash
+`src/core/replay.ts` replays native-room receipts from the deterministic initial room state.
 
 Reports are:
 
-- `EXACT` — complete v2 history replayed and hash-verified
-- `MIXED_LEGACY` — legacy receipts were action/sequence replayed and the v2 tail was verified
-- `PARTIAL` — the ledger prefix required for reconstruction is missing
-- `MISMATCH` — authority or state hash evidence disagrees
-- `EMPTY` — there is nothing to replay
-
-## Durable crate boundary
-
-`src/persistence/indexedDb.ts` owns browser persistence.
-
-IndexedDB v2 stores:
-
-- media records and local audio Blobs
-- active room snapshot and up to 1,000 receipts
-- named playlists
-
-Persistent crate deletion is privileged and also removes dangling playlist references.
-
-## Metadata authority
-
-Track title, artist, tags and cover URL are authoritative room metadata. Updates are submitted through `UPDATE_TRACK_METADATA`, not patched directly by React.
-
-Operator and DJ seats may edit metadata. Guest and agent seats may not.
+- `EXACT`
+- `MIXED_LEGACY`
+- `PARTIAL`
+- `MISMATCH`
+- `EMPTY`
 
 ## Session bundles
 
 `src/core/bundle.ts` produces schema `jukebot.session.v1`.
 
-A bundle contains the portable room snapshot, room hash, receipts, playlists and a media manifest.
+A bundle contains:
 
-Local audio bytes are deliberately excluded. Local manifest entries identify required media; remote entries may carry a direct URL.
+- portable native room snapshot and hash
+- native-room receipt ledger
+- native playlists
+- Suno source-playlist manifests
+- native media manifest
 
-On import:
-
-- malformed/unsupported schemas are rejected
-- deterministic receipt mismatches are refused by the UI
-- remote media records can be reconstructed
-- already-present local media can be matched
-- missing local media is reported and omitted until the operator supplies it
+Local audio bytes and Suno-hosted audio bytes are deliberately excluded.
 
 ## React surface
 
-`src/App.tsx` projects runtime observation and exposes operator controls. It owns transient UI state such as search text and metadata forms, not authoritative playback state.
+`src/App.tsx` projects runtime observation and exposes operator controls. `SunoDeck` is a hosted-source surface, not a secret path into the native reducer.
 
-`window.JukeBot` exposes observation, ledger, replay validation and governed action submission for scripts and agents.
+`window.JukeBot` exposes observation, ledger, replay validation and governed native action submission for scripts and agents.
 
 ## GitHub Pages
 
@@ -124,4 +151,4 @@ Vite builds with production base path `/JukeBot/`. The Pages workflow runs the f
 
 ## Next boundary
 
-Rung 3 adds a transport-neutral Party Room protocol so phones and remote peers submit the same governed action envelopes as local controllers.
+Rung 3B adds a transport-neutral Party Room protocol so phones and remote peers can submit governed requests while preserving whether a selection is native media or a hosted source.

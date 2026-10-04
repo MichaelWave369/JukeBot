@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
 import { BrowserAudioAdapter } from "./audio/browserAudio";
+import { SunoDeck } from "./components/SunoDeck";
 import { assessBundle, createBundle, parseBundle } from "./core/bundle";
 import { validateReplay } from "./core/replay";
 import { JukeRuntime } from "./core/runtime";
@@ -10,6 +11,7 @@ import type {
   Playlist,
   Receipt,
   RoomState,
+  SunoPlaylist,
   Track,
   TrackMetadataPatch,
 } from "./core/types";
@@ -47,6 +49,7 @@ export function App({ runtime, persistence }: AppProps) {
   const [search, setSearch] = useState("");
   const [playlistName, setPlaylistName] = useState("");
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [sunoPlaylists, setSunoPlaylists] = useState<SunoPlaylist[]>([]);
   const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editArtist, setEditArtist] = useState("");
@@ -68,10 +71,16 @@ export function App({ runtime, persistence }: AppProps) {
   async function refreshPlaylists() {
     if (!persistence) {
       setPlaylists([]);
+      setSunoPlaylists([]);
       return;
     }
     try {
-      setPlaylists(await persistence.listPlaylists());
+      const [nativePlaylists, sunoSources] = await Promise.all([
+        persistence.listPlaylists(),
+        persistence.listSunoPlaylists(),
+      ]);
+      setPlaylists(nativePlaylists);
+      setSunoPlaylists(sunoSources);
     } catch {
       setNotice("Could not read saved playlists");
     }
@@ -268,7 +277,7 @@ export function App({ runtime, persistence }: AppProps) {
   }
 
   function exportSession() {
-    const bundle = createBundle(state, receipts, playlists);
+    const bundle = createBundle(state, receipts, playlists, new Date().toISOString(), sunoPlaylists);
     const blob = new Blob([JSON.stringify(bundle, null, 2)], {
       type: "application/json",
     });
@@ -403,6 +412,13 @@ export function App({ runtime, persistence }: AppProps) {
           </label>
         </div>
       </section>
+
+      <SunoDeck
+        persistence={persistence}
+        playlists={sunoPlaylists}
+        onPlaylistsChange={setSunoPlaylists}
+        onNotice={setNotice}
+      />
 
       <section className="grid">
         <div className="panel">
