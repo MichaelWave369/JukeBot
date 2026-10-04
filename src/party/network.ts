@@ -4,7 +4,9 @@ import type {
   PartyGuestHello,
   PartyGuestRequest,
   PartyHostSnapshot,
+  PartyTransportProfile,
 } from "./types";
+import { normalizeTransportProfile } from "./transport";
 
 const APP_ID = "io.github.michaelwave369.jukebot.party.v1";
 
@@ -34,12 +36,33 @@ export function createPartyNetwork(
   roomId: string,
   password: string,
   handlers: PartyNetworkHandlers = {},
+  transport?: PartyTransportProfile,
 ): PartyNetwork {
+  const profile = normalizeTransportProfile(transport);
+
+  const relayConfig = profile.relayUrls?.length
+    ? {
+        urls: profile.relayUrls,
+        warnOnRelayFailure: true,
+      }
+    : {
+        redundancy: profile.relayRedundancy ?? 5,
+        warnOnRelayFailure: true,
+      };
+
+  const turnConfig = profile.turn?.map((server) => ({
+    urls: server.urls,
+    username: server.username,
+    credential: server.credential,
+  }));
+
   const room = joinRoom(
     {
       appId: APP_ID,
       password,
-    },
+      relayConfig,
+      turnConfig,
+    } as any,
     roomId,
     {
       onJoinError: ({ error }) => {
