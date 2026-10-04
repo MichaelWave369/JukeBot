@@ -7,9 +7,16 @@ import {
   sunoEmbedUrl,
 } from "../sources/suno";
 
+export interface SunoRequestedSelection {
+  playlistId?: string;
+  songId: string;
+  token: string;
+}
+
 interface SunoDeckProps {
   persistence: JukePersistence | null;
   playlists: SunoPlaylist[];
+  requestedSelection?: SunoRequestedSelection | null;
   onPlaylistsChange: (playlists: SunoPlaylist[]) => void;
   onNotice: (message: string) => void;
 }
@@ -21,6 +28,7 @@ function newId(): string {
 export function SunoDeck({
   persistence,
   playlists,
+  requestedSelection,
   onPlaylistsChange,
   onNotice,
 }: SunoDeckProps) {
@@ -51,6 +59,31 @@ export function SunoDeck({
   );
 
   const activeTrack = activePlaylist?.tracks[activeIndex] ?? null;
+
+  useEffect(() => {
+    if (!requestedSelection) return;
+
+    const preferred = requestedSelection.playlistId
+      ? playlists.find((playlist) => playlist.id === requestedSelection.playlistId)
+      : undefined;
+
+    const playlist =
+      preferred?.tracks.some((track) => track.songId === requestedSelection.songId)
+        ? preferred
+        : playlists.find((candidate) =>
+            candidate.tracks.some((track) => track.songId === requestedSelection.songId),
+          );
+
+    if (!playlist) return;
+
+    const index = playlist.tracks.findIndex(
+      (track) => track.songId === requestedSelection.songId,
+    );
+    if (index < 0) return;
+
+    setActivePlaylistId(playlist.id);
+    setActiveIndex(index);
+  }, [playlists, requestedSelection]);
 
   async function refresh() {
     if (!persistence) return;
