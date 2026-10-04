@@ -1,5 +1,6 @@
 import type {
   PartyTransportProfile,
+  PartyTransportStrategy,
   PartyTurnServer,
 } from "./types";
 
@@ -18,7 +19,7 @@ export interface TransportDiagnostic {
 }
 
 export interface JoinIssue {
-  kind: "turn-likely" | "password" | "offline" | "generic";
+  kind: "turn-likely" | "password" | "offline" | "relay" | "generic";
   message: string;
   suggestion: string;
 }
@@ -70,6 +71,9 @@ function normalizeTurnServer(server: PartyTurnServer): PartyTurnServer | null {
 export function normalizeTransportProfile(
   profile?: PartyTransportProfile,
 ): PartyTransportProfile {
+  const strategy: PartyTransportStrategy =
+    profile?.strategy === "ws-relay" ? "ws-relay" : "nostr";
+
   const relayUrls = unique(
     (profile?.relayUrls ?? [])
       .map(normalizeRelayUrl)
@@ -87,13 +91,16 @@ export function normalizeTransportProfile(
 
   return {
     version: 1,
+    strategy,
     relayUrls: relayUrls.length ? relayUrls : undefined,
-    relayRedundancy: relayUrls.length ? undefined : relayRedundancy,
+    relayRedundancy:
+      strategy === "nostr" && !relayUrls.length ? relayRedundancy : undefined,
     turn: turn.length ? turn : undefined,
   };
 }
 
 export function transportProfileFromInputs(input: {
+  strategy: PartyTransportStrategy;
   relayUrls: string;
   relayRedundancy: number;
   turnUrl: string;
@@ -112,6 +119,7 @@ export function transportProfileFromInputs(input: {
 
   return normalizeTransportProfile({
     version: 1,
+    strategy: input.strategy,
     relayUrls,
     relayRedundancy: input.relayRedundancy,
     turn: turnUrls.length
@@ -126,13 +134,30 @@ export function transportProfileFromInputs(input: {
   });
 }
 
+export function controlledRelayReady(
+  profile?: PartyTransportProfile,
+): boolean {
+  const normalized = normalizeTransportProfile(profile);
+  return (
+    normalized.strategy !== "ws-relay" ||
+    Boolean(normalized.relayUrls?.length)
+  );
+}
+
 export function transportProfileLabel(
   profile?: PartyTransportProfile,
 ): string {
   const normalized = normalizeTransportProfile(profile);
-  const relay = normalized.relayUrls?.length
-    ? `${normalized.relayUrls.length} custom relay${normalized.relayUrls.length === 1 ? "" : "s"}`
-    : `default Nostr ×${normalized.relayRedundancy ?? 5}`;
+
+  const relay =
+    normalized.strategy === "ws-relay"
+      ? normalized.relayUrls?.length
+        ? `controlled WS ×${normalized.relayUrls.length}`
+        : "controlled WS · missing URL"
+      : normalized.relayUrls?.length
+        ? `${normalized.relayUrls.length} custom Nostr relay${normalized.relayUrls.length === 1 ? "" : "s"}`
+        : `default Nostr ×${normalized.relayRedundancy ?? 5}`;
+
   const turn = normalized.turn?.length
     ? `TURN ${normalized.turn.length}`
     : "direct/STUN";
@@ -149,14 +174,14 @@ export function collectTransportDiagnostics(
       ? window.isSecureContext
       : true;
 
-  const hasWebRtc =
-    typeof RTCPeerConnection !== "undefined";
+  const hasWebRtc = typeof RTCPeerConnection !== "undefined";
   const hasCrypto =
     typeof crypto !== "undefined" && Boolean(crypto.subtle);
-  const hasWebSocket =
-    typeof WebSocket !== "undefined";
+  const hasWebSocket = typeof WebSocket !== "undefined";
   const online =
     typeof navigator === "undefined" ? true : navigator.onLine;
+
+  const relayReady = controlledRelayReady(normalized);
 
   return [
     {
@@ -201,11 +226,16 @@ export function collectTransportDiagnostics(
     },
     {
       id: "relay-profile",
-      status: "pass",
+      status: relayReady ? "pass" : "fail",
       label: "Signaling",
-      detail: normalized.relayUrls?.length
-        ? `${normalized.relayUrls.length} custom Nostr relay URL(s)`
-        : `Trystero default Nostr relays, redundancy ${normalized.relayRedundancy ?? 5}`,
+      detail:
+        normalized.strategy === "ws-relay"
+          ? normalized.relayUrls?.length
+            ? `Controlled WebSocket relay: ${normalized.relayUrls.join(", ")}`
+            : "Controlled relay mode requires at least one ws:// or wss:// URL"
+          : normalized.relayUrls?.length
+            ? `${normalized.relayUrls.length} custom Nostr relay URL(s)`
+            : `Trystero default Nostr relays, redundancy ${normalized.relayRedundancy ?? 5}`,
     },
     {
       id: "turn-profile",
@@ -220,6 +250,19 @@ export function collectTransportDiagnostics(
 
 export function classifyJoinIssue(message: string): JoinIssue {
   const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes("websocket") ||
+    normalized.includes("relay") ||
+    normalized.includes("socket")
+  ) {
+    return {
+      kind: "relay",
+      message,
+      suggestion:
+        "The signaling relay could not be reached. Verify the ws/wss URL, TLS certificate, and relay process.",
+    };
+  }
 
   if (
     normalized.includes("ice") ||
