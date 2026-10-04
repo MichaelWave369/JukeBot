@@ -15,6 +15,7 @@ export interface PartyNetworkHandlers {
   onGuestHello?: (hello: PartyGuestHello, peerId: string) => void;
   onGuestRequest?: (request: PartyGuestRequest, peerId: string) => void;
   onDecision?: (decision: PartyDecision, peerId: string) => void;
+  onJoinError?: (message: string) => void;
 }
 
 export interface PartyNetwork {
@@ -38,6 +39,13 @@ export function createPartyNetwork(
       password,
     },
     roomId,
+    {
+      onJoinError: ({ error }) => {
+        handlers.onJoinError?.(
+          error instanceof Error ? error.message : String(error),
+        );
+      },
+    },
   );
 
   const snapshotAction = room.makeAction<PartyHostSnapshot>("jb-snapshot");
