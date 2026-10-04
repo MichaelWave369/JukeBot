@@ -2,6 +2,10 @@
 
 **A local-first, agent-native jukebox runtime for humans, bots, scripts and network peers.**
 
+Live site after the Pages workflow deploys from `main`:
+
+**https://michaelwave369.github.io/JukeBot/**
+
 JukeBot is deliberately not just a music-player UI. Its core rule is that every controller uses the same governed action boundary:
 
 ```text
@@ -12,15 +16,17 @@ Controller -> Observation -> Action Bus -> Authority -> Room State
                                           Audio / UI / Network adapters
 ```
 
-The browser app already provides a working local deck while the headless runtime gives later agents, replays and peers a stable control surface.
+## Current build — v0.2.0 / Rung 2A
 
-## Rung 1
-
+- React + Vite browser deck
+- GitHub Pages deployment workflow
 - Local audio file loading
 - Direct audio URL loading
-- Crate/library and queue
-- Play, pause, stop and skip
-- Master volume
+- IndexedDB-backed persistent crate
+- Local audio Blobs survive page reloads
+- Queue/current track/volume/ledger session restore
+- Safe track removal from persistent storage and runtime state
+- Browser restart restores the crate but does not autoplay
 - Operator, DJ, guest, agent, replay and script roles
 - Explicit authority policy
 - Deterministic room reducer
@@ -30,7 +36,7 @@ The browser app already provides a working local deck while the headless runtime
 - Vitest acceptance coverage
 - GitHub Actions validation
 
-## Run it
+## Run locally
 
 Requires Node.js 22+.
 
@@ -40,8 +46,6 @@ cd JukeBot
 npm install
 npm run dev
 ```
-
-Then open the local Vite URL shown in the terminal.
 
 ## Validate
 
@@ -65,13 +69,22 @@ JukeBot.submit({
 })
 
 JukeBot.ledger()
+JukeBot.persistence
 ```
 
 Controllers do not receive a privileged back door. They submit normal actions and authority decides whether those actions are allowed.
 
+## Persistence model
+
+Local media bytes are stored in the browser's IndexedDB database. Runtime-only `blob:` URLs are regenerated when JukeBot starts again. Room state and the latest 1,000 receipts are persisted alongside the crate.
+
+Remote tracks store their direct URL rather than copying media bytes.
+
+JukeBot intentionally resumes restored sessions in the stopped state so browser autoplay policy and operator intent remain authoritative.
+
 ## Audio policy
 
-JukeBot does not ship copyrighted music and does not bypass streaming-service protections. Rung 1 plays audio the operator supplies locally or through a direct playable URL.
+JukeBot does not ship copyrighted music and does not bypass streaming-service protections. It plays audio the operator supplies locally or through a direct playable URL.
 
 ## Architecture and roadmap
 
