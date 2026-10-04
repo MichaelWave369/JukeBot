@@ -8,7 +8,7 @@ Live site:
 
 JukeBot is deliberately not just a music-player UI. Every controller shares governed boundaries rather than privileged back doors.
 
-## Current build — v0.6.0 / Rung 3C1
+## Current build — v0.7.0 / Rung 3C2
 
 ### Native deck
 - local audio files and direct playable audio URLs
@@ -33,33 +33,86 @@ JukeBot is deliberately not just a music-player UI. Every controller shares gove
 - stale-catalog rejection
 - Party receipts linked to native Reality Ledger receipts when applicable
 
-### Transport hardening
-Rung 3C1 adds an inspectable network profile instead of a mysterious "connection failed" shrug.
+### Signaling strategies
 
-Host controls now include:
+Party Room now has two explicit signaling strategies.
 
-- browser capability diagnostics
-- secure-context / WebRTC / Web Crypto / WebSocket / online checks
-- default Nostr relay redundancy selection
-- optional custom Nostr `wss://` relay URLs
-- optional TURN fallback
-- connection-failure classification with TURN guidance
+#### Nostr matchmaking
 
-Custom network settings are **session-only**.
+Default lane:
 
-When a host configures a custom network profile, JukeBot places that profile in the Party invite URL fragment so the phone receives the same settings automatically.
+```text
+JukeBot host/guest
+      |
+      v
+Trystero Nostr signaling
+      |
+      v
+WebRTC peer connection
+```
 
-TURN credentials are never committed to the repository or put in ordinary query parameters. If supplied, they travel in the private invite fragment and should therefore be **short-lived/ephemeral credentials**, not a permanent TURN account password.
+The host may use the default Nostr pool or explicit Nostr relay URLs.
 
-The default path remains Trystero's Nostr matchmaking plus direct WebRTC.
+#### Controlled WebSocket relay
 
-See [docs/PARTY_ROOM.md](docs/PARTY_ROOM.md).
+Operator-owned lane:
 
-### Portable evidence
-- portable `room-v2` hashes
-- deterministic native receipt replay
-- portable JSON session bundles
-- explicit native vs hosted-source evidence boundaries
+```text
+JukeBot host/guest
+      |
+      v
+@trystero-p2p/ws-relay
+      |
+      v
+your wss:// relay
+      |
+      v
+WebRTC peer connection
+```
+
+Controlled mode is **fail-closed**. It requires at least one explicit relay URL and does not silently fall back to public Nostr.
+
+The relay carries signaling used to establish WebRTC. Party application payloads continue peer-to-peer after the connection forms.
+
+### Included relay service
+
+The repository contains a runnable relay in `relay/`.
+
+```bash
+npm install
+npm run relay:start
+```
+
+Endpoints:
+
+- `GET /healthz`
+- `GET /status`
+
+A Dockerfile is included at `relay/Dockerfile`.
+
+For GitHub Pages clients, expose the service behind TLS as a `wss://` endpoint.
+
+### Validation
+
+`npm run check` now includes:
+
+- runtime tests
+- replay tests
+- Suno tests
+- Party protocol/transport tests
+- controlled relay process smoke test
+- TypeScript validation
+- production Vite build
+
+The relay smoke test boots the service on an ephemeral port, verifies `/healthz` and `/status`, and shuts it down cleanly.
+
+### TURN
+
+Both signaling strategies can use the existing optional TURN profile for restrictive NAT/firewall cases.
+
+TURN credentials remain session-only and should be ephemeral/time-limited.
+
+See [docs/PARTY_ROOM.md](docs/PARTY_ROOM.md) and [relay/README.md](relay/README.md).
 
 ## Run locally
 
@@ -70,12 +123,6 @@ git clone https://github.com/MichaelWave369/JukeBot.git
 cd JukeBot
 npm install
 npm run dev
-```
-
-## Validate
-
-```bash
-npm run check
 ```
 
 ## Agent/script API
@@ -92,15 +139,11 @@ JukeBot.submit(...)
 
 IndexedDB stores local media, native room state, recent receipts, native playlists and Suno source playlists.
 
-Party rooms and transport credentials remain ephemeral. Session bundles do not contain Party room passwords, TURN credentials, or live peer identifiers.
+Party room secrets, live peer IDs, TURN credentials and controlled-relay session settings are not written into session bundles.
 
 ## Audio policy
 
 JukeBot does not ship copyrighted music or bypass provider protections. Native playback uses media the operator supplies. Suno playback remains hosted by Suno.
-
-## Architecture and roadmap
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## License
 

@@ -11,6 +11,7 @@ import { createPartyNetwork } from "../party/network";
 import {
   classifyJoinIssue,
   collectTransportDiagnostics,
+  controlledRelayReady,
   transportProfileFromInputs,
   transportProfileLabel,
 } from "../party/transport";
@@ -28,6 +29,7 @@ import type {
   PartyRequestRecord,
   PartySelection,
   PartyTransportProfile,
+  PartyTransportStrategy,
 } from "../party/types";
 
 interface PartyRoomProps {
@@ -110,6 +112,8 @@ export function PartyRoom({
   const [guestPendingIds, setGuestPendingIds] = useState<string[]>([]);
   const [guestError, setGuestError] = useState<string | null>(null);
   const [guestFilter, setGuestFilter] = useState("");
+  const [transportStrategy, setTransportStrategy] =
+    useState<PartyTransportStrategy>("nostr");
   const [relayUrlsInput, setRelayUrlsInput] = useState("");
   const [relayRedundancy, setRelayRedundancy] = useState(5);
   const [turnUrl, setTurnUrl] = useState("");
@@ -120,13 +124,21 @@ export function PartyRoom({
   const hostTransportProfile = useMemo<PartyTransportProfile>(
     () =>
       transportProfileFromInputs({
+        strategy: transportStrategy,
         relayUrls: relayUrlsInput,
         relayRedundancy,
         turnUrl,
         turnUsername,
         turnCredential,
       }),
-    [relayUrlsInput, relayRedundancy, turnUrl, turnUsername, turnCredential],
+    [
+      transportStrategy,
+      relayUrlsInput,
+      relayRedundancy,
+      turnUrl,
+      turnUsername,
+      turnCredential,
+    ],
   );
 
   const hostDiagnostics = useMemo(
@@ -155,6 +167,13 @@ export function PartyRoom({
 
   async function startHost() {
     if (hostNetworkRef.current) return;
+
+    if (!controlledRelayReady(hostTransportProfile)) {
+      setHostTransportIssue(
+        "Controlled WebSocket relay mode requires at least one ws:// or wss:// relay URL.",
+      );
+      return;
+    }
 
     setHostTransportIssue(null);
     const provisional = createPartyInvite("pending", hostTransportProfile);
@@ -673,12 +692,33 @@ export function PartyRoom({
 
           <div className="transport-form">
             <label>
-              CUSTOM NOSTR RELAYS
+              SIGNALING STRATEGY
+              <select
+                value={transportStrategy}
+                onChange={(event) =>
+                  setTransportStrategy(
+                    event.target.value === "ws-relay" ? "ws-relay" : "nostr",
+                  )
+                }
+              >
+                <option value="nostr">NOSTR MATCHMAKING</option>
+                <option value="ws-relay">CONTROLLED WS RELAY</option>
+              </select>
+            </label>
+
+            <label className="transport-relay-field">
+              {transportStrategy === "ws-relay"
+                ? "CONTROLLED RELAY URLS"
+                : "CUSTOM NOSTR RELAYS"}
               <textarea
                 rows={3}
                 value={relayUrlsInput}
                 onChange={(event) => setRelayUrlsInput(event.target.value)}
-                placeholder={"Optional, one wss:// relay per line\nLeave blank for Trystero defaults"}
+                placeholder={
+                  transportStrategy === "ws-relay"
+                    ? "wss://relay.example.com\nRequired in controlled mode"
+                    : "Optional, one wss:// Nostr relay per line\nLeave blank for Trystero defaults"
+                }
               />
             </label>
 
@@ -689,7 +729,10 @@ export function PartyRoom({
                 min={1}
                 max={10}
                 value={relayRedundancy}
-                disabled={Boolean(relayUrlsInput.trim())}
+                disabled={
+                  transportStrategy === "ws-relay" ||
+                  Boolean(relayUrlsInput.trim())
+                }
                 onChange={(event) =>
                   setRelayRedundancy(
                     Math.max(1, Math.min(10, Number(event.target.value) || 1)),
@@ -728,7 +771,10 @@ export function PartyRoom({
           </div>
 
           <p className="source-note">
-            Custom transport settings are session-only. If TURN is configured,
+            {transportStrategy === "ws-relay"
+              ? "Controlled mode uses only the relay URL(s) above for Trystero signaling. It does not silently fall back to public Nostr."
+              : "Nostr mode uses Trystero's default relay pool unless custom Nostr relays are supplied."}
+            {" "}Custom transport settings are session-only. If TURN is configured,
             its credential travels only inside the QR/link fragment so the guest
             receives the same ephemeral profile. Use short-lived TURN credentials,
             not a permanent account secret.
@@ -764,7 +810,12 @@ export function PartyRoom({
               touches playback until the host accepts it.
             </p>
           </div>
-          <button onClick={() => void startHost()}>START PARTY ROOM</button>
+          <button
+            disabled={!controlledRelayReady(hostTransportProfile)}
+            onClick={() => void startHost()}
+          >
+            START PARTY ROOM
+          </button>
         </div>
       ) : (
         <>

@@ -14,6 +14,7 @@ import type {
 } from "../src/party/types";
 import {
   classifyJoinIssue,
+  controlledRelayReady,
   normalizeTransportProfile,
   transportProfileFromInputs,
 } from "../src/party/transport";
@@ -110,6 +111,7 @@ describe("Party invite", () => {
       password: "room-secret",
       transport: {
         version: 1,
+        strategy: "nostr",
         relayUrls: ["wss://relay.example"],
         turn: [
           {
@@ -138,6 +140,7 @@ describe("Party invite", () => {
       password: "room-secret",
       transport: {
         version: 1,
+        strategy: "nostr",
         relayUrls: ["wss://relay.example"],
         relayRedundancy: undefined,
         turn: [
@@ -251,6 +254,7 @@ describe("Party host request engine", () => {
 describe("Party transport hardening", () => {
   it("normalizes relay and TURN inputs while rejecting invalid schemes", () => {
     const profile = transportProfileFromInputs({
+      strategy: "nostr",
       relayUrls: [
         "wss://relay-a.example",
         "https://not-a-websocket.example",
@@ -264,6 +268,7 @@ describe("Party transport hardening", () => {
 
     expect(profile).toEqual({
       version: 1,
+      strategy: "nostr",
       relayUrls: ["wss://relay-a.example"],
       relayRedundancy: undefined,
       turn: [
@@ -292,9 +297,58 @@ describe("Party transport hardening", () => {
     ).toBe(1);
   });
 
-  it("classifies connection/ICE failures as likely TURN cases", () => {
-    const issue = classifyJoinIssue("WebRTC ICE connection timeout");
-    expect(issue.kind).toBe("turn-likely");
-    expect(issue.suggestion.toLowerCase()).toContain("turn");
+  it("requires an explicit relay URL in controlled WebSocket mode", () => {
+    const missing = normalizeTransportProfile({
+      version: 1,
+      strategy: "ws-relay",
+    });
+    const configured = normalizeTransportProfile({
+      version: 1,
+      strategy: "ws-relay",
+      relayUrls: ["wss://relay.example"],
+      relayRedundancy: 9,
+    });
+
+    expect(controlledRelayReady(missing)).toBe(false);
+    expect(controlledRelayReady(configured)).toBe(true);
+    expect(configured.relayRedundancy).toBeUndefined();
+    expect(configured.relayUrls).toEqual(["wss://relay.example"]);
+  });
+
+  it("round-trips controlled relay strategy through the private invite profile", () => {
+    const invite: PartyInvite = {
+      protocol: "jukebot.party.v1",
+      roomId: "room-controlled",
+      hostPeerId: "host-controlled",
+      password: "room-secret",
+      transport: {
+        version: 1,
+        strategy: "ws-relay",
+        relayUrls: ["wss://relay.example"],
+      },
+    };
+
+    const url = buildPartyInviteUrl(
+      invite,
+      "https://michaelwave369.github.io/JukeBot/",
+    );
+
+    expect(parsePartyInviteUrl(url)?.transport).toEqual({
+      version: 1,
+      strategy: "ws-relay",
+      relayUrls: ["wss://relay.example"],
+      relayRedundancy: undefined,
+      turn: undefined,
+    });
+  });
+
+  it("classifies relay/socket failures separately from ICE failures", () => {
+    const relayIssue = classifyJoinIssue("WebSocket relay connection failed");
+    const iceIssue = classifyJoinIssue("WebRTC ICE connection timeout");
+
+    expect(relayIssue.kind).toBe("relay");
+    expect(relayIssue.suggestion.toLowerCase()).toContain("relay");
+    expect(iceIssue.kind).toBe("turn-likely");
+    expect(iceIssue.suggestion.toLowerCase()).toContain("turn");
   });
 });

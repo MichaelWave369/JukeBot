@@ -1,5 +1,7 @@
 export type PartySourceKind = "native" | "suno";
 
+export type PartyTransportStrategy = "nostr" | "ws-relay";
+
 export interface PartyTurnServer {
   urls: string[];
   username?: string;
@@ -8,6 +10,7 @@ export interface PartyTurnServer {
 
 export interface PartyTransportProfile {
   version: 1;
+  strategy?: PartyTransportStrategy;
   relayUrls?: string[];
   relayRedundancy?: number;
   turn?: PartyTurnServer[];

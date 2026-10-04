@@ -2,7 +2,7 @@
 
 JukeBot is built as a music runtime first and a visual jukebox second.
 
-## Core control flow
+## Native authority path
 
 ```text
 Human / DJ / Agent / Script
@@ -22,161 +22,116 @@ Human / DJ / Agent / Script
 
 Remote guests do not get a direct Action Bus handle.
 
-## Party Room flow
+## Party request path
 
 ```text
-Guest phone
-   |
-   | PartyGuestRequest
-   v
-WebRTC data channel
-   |
-   v
+Guest
+  |
+  v
+PartyGuestRequest
+  |
+  v
+signaling-selected WebRTC peer
+  |
+  v
 Host Party engine
-   |
-   +--> dedupe / catalog / source validation
-   |
-   v
+  |
+  +--> dedupe / catalog / source validation
+  |
+  v
 Host ACCEPT / REFUSE
-   |
-   +--> PartyReceipt
-   |
-   +--> native source -> guest-role Action Bus submission
-   |                       |
-   |                       v
-   |                 Reality Ledger receipt
-   |
-   +--> Suno source --> hosted-source selection only
+  |
+  +--> PartyReceipt
+  |
+  +--> native -> guest-role Action Bus -> Reality Ledger
+  |
+  +--> Suno -> hosted-source selection
 ```
 
-Network reachability is not authority.
+## Signaling strategy boundary
 
-## Party protocol
+`src/party/network.ts` supports two strategies behind the same Party protocol.
 
-The wire protocol is versioned as:
+### Nostr
 
 ```text
-jukebot.party.v1
+trystero
+  -> Nostr signaling
+  -> WebRTC
 ```
 
-Key payloads:
+Nostr is the default.
 
-- host snapshot
-- guest hello
-- guest request
-- host decision
-
-A guest request carries:
-
-- unique request ID
-- guest display name
-- catalog hash
-- typed source selection
-- creation time
-
-Typed source selections prevent a native track ID and a hosted Suno song ID from collapsing into one ambiguous namespace.
-
-## Safe host snapshot
-
-The host snapshot intentionally contains only requestable metadata.
-
-Native entries expose:
-
-- JukeBot track ID
-- title
-- artist
-- local/url source **type**
-
-They do not expose:
-
-- local Blob URLs
-- direct remote audio URLs
-- local filenames beyond title metadata
-- IndexedDB records
-
-Suno entries expose provider identity metadata needed to request a hosted source selection.
-
-## Request dedupe
-
-The host fingerprints each request ID together with its peer ID, guest name, catalog hash and typed selection.
-
-If the same peer resends the same ID and content after reconnect, the request is treated as a duplicate and the existing record is reused.
-
-If a request ID is reused with different content, the protocol rejects it as a conflict.
-
-This makes reconnect retry behavior idempotent.
-
-## Catalog freshness
-
-Every safe catalog has a stable hash.
-
-A request must reference the hash of the catalog the guest actually saw. If the host library changes before the request arrives, the stale request is rejected rather than silently resolving against a different catalog.
-
-## Host decisions and receipts
-
-Accepted/refused decisions produce Party receipts.
-
-For accepted native media, the host submits:
+### Controlled WebSocket relay
 
 ```text
-actor.role = guest
-action = ENQUEUE_TRACK
+@trystero-p2p/ws-relay
+  -> operator-controlled WebSocket signaling
+  -> WebRTC
 ```
 
-through the existing JukeRuntime.
+Controlled mode requires explicit relay URLs.
 
-The Party receipt stores the resulting native receipt ID so the host decision can be followed into the Reality Ledger.
+There is no silent fallback from controlled mode to Nostr.
 
-For Suno, the Party receipt records acceptance but does not invent a native audio receipt. The accepted request selects the appropriate hosted Suno player.
+The transport profile travels in the Party invite fragment so host and guest select the same strategy.
 
-## P2P transport
+## Controlled relay service
 
-`src/party/network.ts` is a transport adapter. The protocol core does not import WebRTC or Trystero.
+`relay/server.mjs` uses the official `createWsRelayServer` server boundary.
 
-The current adapter uses Trystero with its default Nostr matchmaking strategy. Once peers connect, JukeBot Party payloads use the browser WebRTC data channel.
+The service:
 
-The transport is intentionally replaceable. A future LAN/self-hosted relay adapter must carry the same `jukebot.party.v1` messages.
+- attaches WebSocket signaling to a Node HTTP server
+- exposes `/healthz`
+- exposes `/status`
+- applies bounded topic/subscription defaults
+- supports graceful SIGINT/SIGTERM shutdown
 
-## Invite security boundary
+The relay transports signaling topics, not JukeBot media.
 
-A host creates:
+## TURN boundary
 
-- random room ID
-- random room password
-- expected host peer ID
+TURN remains independent of signaling strategy.
 
-The public invite URL puts room ID and host peer ID in query parameters.
+A signaling relay answers "how do peers exchange connection information?"
 
-The room password is placed in the URL fragment:
+TURN answers "what if those peers cannot establish a direct network path?"
 
-```text
-...?party=<room>&host=<peer>#key=<secret>
-```
+Both Nostr and controlled WebSocket signaling can be combined with the same TURN profile.
 
-Fragments are browser-side invite material and are not part of normal HTTP requests to GitHub Pages.
+## Safe catalog
 
-Guests trust host snapshots/decisions only when they arrive from the peer ID pinned in the invite.
+Guests receive requestable metadata only.
 
-## Native vs hosted audio
+Native media source URLs, IndexedDB Blob URLs and host-private media bytes are not exposed through the Party catalog.
 
-### Native audio
+## Request idempotency
 
-JukeBot owns playback and can issue authoritative room receipts.
+Each request has a stable request ID and catalog hash.
 
-### Hosted Suno
-
-Suno owns playback inside its iframe. JukeBot may select the hosted item and receipt the host's Party decision, but it does not claim playback-position/song-ended evidence that Suno has not exposed.
+Reconnect retries reuse the same request envelope. Identical retries dedupe; conflicting reuse is rejected.
 
 ## Persistence
 
-IndexedDB v3 owns durable local media, room state, native playlists and Suno source playlists.
+Party room secrets, peer IDs, TURN credentials and signaling profiles are ephemeral.
 
-Party rooms in v0.5.0 are deliberately ephemeral. Room secrets and live peer IDs are not written into portable session bundles.
+They are not written into portable JukeBot session bundles.
 
-## GitHub Pages
+## Validation
 
-The static Pages deployment can still host a real Party Room because the browser transport is peer-to-peer. GitHub Pages serves the app bundle; it is not the Party request server.
+The CI gate validates:
+
+- deterministic runtime
+- portable replay
+- Suno source parsing
+- Party protocol/transport profile rules
+- controlled relay process boot
+- relay health/status responses
+- clean relay shutdown
+- TypeScript
+- production client build
 
 ## Next boundary
 
-Rung 3C adds optional controlled transport infrastructure such as a self-hosted relay and explicit TURN configuration without changing the Party protocol.
+Rung 3C3 moves from software qualification to physical network qualification across real browsers, devices and NAT paths.
