@@ -40,7 +40,7 @@ async function bootstrap() {
   }
 
   window.JukeBot = {
-    version: "0.3.0",
+    version: "0.4.0",
     observe: () => runtime.observe(),
     ledger: () => runtime.ledger(),
     replay: () => validateReplay(runtime.ledger(), runtime.observe().roomId),
