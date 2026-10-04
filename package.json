@@ -1,15 +1,17 @@
 {
   "name": "jukebot",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
-    "check": "npm run test && npm run build"
+    "check": "npm run test && npm run build",
+    "relay:start": "node relay/server.mjs"
   },
   "dependencies": {
+    "@trystero-p2p/ws-relay": "^0.25.4",
     "qrcode": "^1.5.4",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
