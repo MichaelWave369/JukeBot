@@ -8,6 +8,8 @@ import type {
 
 const APP_ID = "io.github.michaelwave369.jukebot.party.v1";
 
+type WireObject = { [key: string]: any };
+
 export interface PartyNetworkHandlers {
   onPeerJoin?: (peerId: string) => void;
   onPeerLeave?: (peerId: string) => void;
@@ -41,47 +43,51 @@ export function createPartyNetwork(
     roomId,
     {
       onJoinError: ({ error }) => {
-        handlers.onJoinError?.(
-          error instanceof Error ? error.message : String(error),
-        );
+        handlers.onJoinError?.(String(error));
       },
     },
   );
 
-  const snapshotAction = room.makeAction<PartyHostSnapshot>("jb-snapshot");
-  const helloAction = room.makeAction<PartyGuestHello>("jb-guest-hello");
-  const requestAction = room.makeAction<PartyGuestRequest>("jb-request");
-  const decisionAction = room.makeAction<PartyDecision>("jb-decision");
+  // Trystero's wire generic requires a dictionary-shaped JSON payload.
+  // Keep that permissiveness at this serialization seam only; JukeBot's
+  // protocol remains strongly typed on both sides of the adapter.
+  const snapshotAction = room.makeAction<WireObject>("jb-snapshot");
+  const helloAction = room.makeAction<WireObject>("jb-guest-hello");
+  const requestAction = room.makeAction<WireObject>("jb-request");
+  const decisionAction = room.makeAction<WireObject>("jb-decision");
 
   room.onPeerJoin = (peerId) => handlers.onPeerJoin?.(peerId);
   room.onPeerLeave = (peerId) => handlers.onPeerLeave?.(peerId);
 
   snapshotAction.onMessage = (data, { peerId }) =>
-    handlers.onSnapshot?.(data, peerId);
+    handlers.onSnapshot?.(data as PartyHostSnapshot, peerId);
 
   helloAction.onMessage = (data, { peerId }) =>
-    handlers.onGuestHello?.(data, peerId);
+    handlers.onGuestHello?.(data as PartyGuestHello, peerId);
 
   requestAction.onMessage = (data, { peerId }) =>
-    handlers.onGuestRequest?.(data, peerId);
+    handlers.onGuestRequest?.(data as PartyGuestRequest, peerId);
 
   decisionAction.onMessage = (data, { peerId }) =>
-    handlers.onDecision?.(data, peerId);
+    handlers.onDecision?.(data as PartyDecision, peerId);
 
   return {
     selfPeerId: selfId,
     peerIds: () => Object.keys(room.getPeers()),
     sendSnapshot: async (snapshot, target) => {
-      await snapshotAction.send(snapshot, target ? { target } : undefined);
+      await snapshotAction.send(
+        snapshot as unknown as WireObject,
+        target ? { target } : undefined,
+      );
     },
     sendGuestHello: async (hello, target) => {
-      await helloAction.send(hello, { target });
+      await helloAction.send(hello as unknown as WireObject, { target });
     },
     sendGuestRequest: async (request, target) => {
-      await requestAction.send(request, { target });
+      await requestAction.send(request as unknown as WireObject, { target });
     },
     sendDecision: async (decision, target) => {
-      await decisionAction.send(decision, { target });
+      await decisionAction.send(decision as unknown as WireObject, { target });
     },
     leave: () => room.leave(),
   };
