@@ -7,8 +7,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
-    "check": "npm run test && npm run build",
-    "relay:start": "node relay/server.mjs"
+    "check": "npm run test && npm run relay:smoke && npm run build",
+    "relay:start": "node relay/server.mjs",
+    "relay:smoke": "node scripts/relay-smoke.mjs"
   },
   "dependencies": {
     "@trystero-p2p/ws-relay": "^0.25.4",
