@@ -1,5 +1,6 @@
 import QRCode from "qrcode";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { QualificationPanel } from "./QualificationPanel";
 import type { RoomState, SunoPlaylist } from "../core/types";
 import {
   buildPartyInviteUrl,
@@ -8,6 +9,8 @@ import {
   currentPartyInvite,
 } from "../party/invite";
 import { createPartyNetwork } from "../party/network";
+import { emptyQualificationObservations } from "../party/qualification";
+import type { QualificationObservations } from "../party/qualification";
 import {
   classifyJoinIssue,
   collectTransportDiagnostics,
@@ -95,6 +98,7 @@ export function PartyRoom({
   const currentSunoPlaylistsRef = useRef(sunoPlaylists);
   const guestRequestsRef = useRef(new Map<string, PartyGuestRequest>());
   const guestNamesRef = useRef<Record<string, string>>({});
+  const hostPeersRef = useRef(new Set<string>());
 
   const [hostState, setHostState] = useState<HostState | null>(null);
   const [hostPeers, setHostPeers] = useState<string[]>([]);
@@ -103,6 +107,8 @@ export function PartyRoom({
   const [partyLedger, setPartyLedger] = useState(
     () => hostEngineRef.current.ledger(),
   );
+  const [qualificationObservations, setQualificationObservations] =
+    useState<QualificationObservations>(() => emptyQualificationObservations());
 
   const [guestName, setGuestName] = useState("Guest");
   const [guestConnected, setGuestConnected] = useState(false);
@@ -184,9 +190,19 @@ export function PartyRoom({
       provisional.password,
       {
         onPeerJoin: (peerId) => {
-          setHostPeers((current) =>
-            current.includes(peerId) ? current : [...current, peerId],
-          );
+          if (!hostPeersRef.current.has(peerId)) {
+            hostPeersRef.current.add(peerId);
+            const peers = [...hostPeersRef.current];
+            setHostPeers(peers);
+            setQualificationObservations((current) => ({
+              ...current,
+              peerJoinCount: current.peerJoinCount + 1,
+              maxConcurrentPeers: Math.max(
+                current.maxConcurrentPeers,
+                peers.length,
+              ),
+            }));
+          }
 
           if (network) {
             void network.sendSnapshot(
@@ -200,7 +216,13 @@ export function PartyRoom({
           }
         },
         onPeerLeave: (peerId) => {
-          setHostPeers((current) => current.filter((id) => id !== peerId));
+          if (hostPeersRef.current.delete(peerId)) {
+            setHostPeers([...hostPeersRef.current]);
+            setQualificationObservations((current) => ({
+              ...current,
+              peerLeaveCount: current.peerLeaveCount + 1,
+            }));
+          }
           const nextNames = { ...guestNamesRef.current };
           delete nextNames[peerId];
           guestNamesRef.current = nextNames;
@@ -236,6 +258,13 @@ export function PartyRoom({
           );
 
           if (result.status === "new" || result.status === "duplicate") {
+            if (result.status === "duplicate") {
+              setQualificationObservations((current) => ({
+                ...current,
+                duplicateRequestCount: current.duplicateRequestCount + 1,
+              }));
+            }
+
             syncHostEngineView();
 
             if (result.status === "duplicate" && result.record.decision && network) {
@@ -243,6 +272,18 @@ export function PartyRoom({
             }
             return;
           }
+
+          setQualificationObservations((current) => ({
+            ...current,
+            staleRequestCount:
+              current.staleRequestCount + (result.status === "stale" ? 1 : 0),
+            conflictRequestCount:
+              current.conflictRequestCount +
+              (result.status === "conflict" ? 1 : 0),
+            unknownRequestCount:
+              current.unknownRequestCount +
+              (result.status === "unknown" ? 1 : 0),
+          }));
 
           const reason = result.reason;
           const refusal: PartyDecision = {
@@ -256,6 +297,10 @@ export function PartyRoom({
           if (network) void network.sendDecision(refusal, peerId);
         },
         onJoinError: (message) => {
+          setQualificationObservations((current) => ({
+            ...current,
+            joinErrorCount: current.joinErrorCount + 1,
+          }));
           const issue = classifyJoinIssue(message);
           setHostTransportIssue(`${issue.message} · ${issue.suggestion}`);
           onNotice(`Party transport warning: ${issue.suggestion}`);
@@ -289,7 +334,17 @@ export function PartyRoom({
       inviteUrl,
       qrDataUrl,
     });
-    setHostPeers(network.peerIds());
+
+    hostPeersRef.current = new Set(network.peerIds());
+    setHostPeers([...hostPeersRef.current]);
+    setQualificationObservations((current) => ({
+      ...current,
+      roomStartCount: current.roomStartCount + 1,
+      maxConcurrentPeers: Math.max(
+        current.maxConcurrentPeers,
+        hostPeersRef.current.size,
+      ),
+    }));
 
     onNotice("Party Room host is live; scan the QR from another device");
   }
@@ -299,7 +354,12 @@ export function PartyRoom({
     hostNetworkRef.current = null;
     hostEngineRef.current = new PartyHostEngine();
     setHostState(null);
+    hostPeersRef.current.clear();
     setHostPeers([]);
+    setQualificationObservations((current) => ({
+      ...current,
+      roomStopCount: current.roomStopCount + 1,
+    }));
     guestNamesRef.current = {};
     setGuestNames({});
     setPending([]);
@@ -485,6 +545,24 @@ export function PartyRoom({
         effectReceiptId,
       },
     );
+
+    setQualificationObservations((current) => ({
+      ...current,
+      acceptedRequestCount:
+        current.acceptedRequestCount + (decisionAccepted ? 1 : 0),
+      refusedRequestCount:
+        current.refusedRequestCount + (decisionAccepted ? 0 : 1),
+      nativeEffectLinkedCount:
+        current.nativeEffectLinkedCount +
+        (decisionAccepted &&
+        record.request.selection.kind === "native" &&
+        effectReceiptId
+          ? 1
+          : 0),
+      sunoAcceptedCount:
+        current.sunoAcceptedCount +
+        (decisionAccepted && record.request.selection.kind === "suno" ? 1 : 0),
+    }));
 
     syncHostEngineView();
     await network.sendDecision(decision, record.peerId);
@@ -922,6 +1000,12 @@ export function PartyRoom({
           </div>
         </>
       )}
+
+      <QualificationPanel
+        transportProfile={hostTransportProfile}
+        observations={qualificationObservations}
+        onNotice={onNotice}
+      />
     </section>
   );
 }
